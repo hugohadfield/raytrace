@@ -17,6 +17,8 @@ black = 'rgb(0,0,0)'
 dark_blue = 'rgb(8, 0, 84)'
 db = [0.033, 0., 0.33]
 
+ORIENTED_PLANE_CULLING = True
+
 
 class Sphere:
     def __init__(self, c, r, colour, specular, spec_k, amb, diffuse, reflection):
@@ -331,6 +333,9 @@ def intersects(ray, scene_type_array, scene_array, origin):
         if scene_type_array[idx] :
             pX = val_pointofXSphere(ray, scene_array[idx, :32], origin)
         else:
+            if ORIENTED_PLANE_CULLING:
+                if meet_val(ray,scene_array[idx, :32])[15] > 0:
+                    continue
             pX = val_pointofXplane(ray, scene_array[idx, :32], origin)
         if pX[0] == -1.: continue
         if idx == 0:
@@ -510,6 +515,8 @@ if __name__ == "__main__":
     print("--- %s seconds ---" % (time.time() - start_time))
 
     print("Start Render")
+
+    ORIENTED_PLANE_CULLING = True
 
     start_time = time.time()
 
