@@ -1,4 +1,4 @@
-# CGARayCast
+# Clifftrace
 
 ## Overview:
 This project uses [Conformal Geometric Algebra (CGA)][cga] to build a ray tracing engine with the [clifford][clifford] library with the following functionality:
@@ -26,7 +26,9 @@ The script requires the following non-standard python packages:
 
 ### Interface with GAOnline:
 
-The output image is saved in the working directory as `fig.png` but there is also a terminal output which allows the scene composition to be drawn in [GAOnline][GAOnline] so that it can be viewed interactively. An example terminal output is:
+**Note GAOnline is now deprecated and a version is no longer hosted on a web server! Instructions still apply to a local version which can be forked from [here][GAOnline].**
+
+The output image is saved in the working directory as `fig.png` but there is also a terminal output which allows the scene composition to be drawn in GAOnline so that it can be viewed interactively. An example terminal output is:
 ```
 DrawLine((1.0^e245),rgb(255, 0 , 0));
 DrawLine((0.70711^e245) - (0.70711^e345),rgb(255, 0 , 0));
@@ -34,7 +36,7 @@ DrawEucPoint(-(6.0^e2) + (6.0^e3) + (35.5^e4) + (36.5^e5),rgb(0, 0, 255));
 ...
 ```
 
-Copy and paste the terminal output into the **box outlined in red** in the [GAOnline][GAOnline] example image shown below.
+Copy and paste the terminal output into the **box outlined in red** in the GAOnline example image shown below.
 
 <figure>
 <img src="https://github.com/sushachawal/CliffordRayTrace/blob/master/GAOnline.png?raw=true" alt="drawing" width="100%"/>
@@ -48,8 +50,9 @@ The output draws:
 
 ## Planned Future Work:
 
+* Move interactive visualisation over to [pyganja][pyganja]
 * ~~Acceleration with [Numba][Numba] starting with the `PointsFromPP` function.~~
-* A front-end to interact with the view as in [GAOnline][GAOnline]. (With Tkinter? PyGame?)
+* A front-end to interact with the view as in GAOnline. (With Tkinter? PyGame?)
 * ~~Ability to draw planes.~~
 * Ability to draw meshes.
 * Full parallelisation either with [Numba][Numba] or on the GPU.
@@ -66,11 +69,11 @@ The output draws:
 
 * For a more complete introduction to GA check out *Geometric Algebra for Physicists* and for a deeper look into GA theory: *Geometric Algebra for Computer Science: An Object-Oriented Approach to Geometry* [(companion site here)][GAforCompSci] which includes documentation of another ray tracer implemented in GA!
 
+[GAOnline]: https://github.com/hugohadfield/GAonline
 [cga]: https://en.wikipedia.org/wiki/Conformal_geometric_algebra
 [clifford]: https://github.com/pygae/clifford
 [NumPy]: https://github.com/numpy/numpy
 [matplotlib]: https://github.com/matplotlib/matplotlib
-[GAOnline]: https://gaonline.herokuapp.com/
 [Numba]: https://github.com/numba/numba
 [ga]: https://en.wikipedia.org/wiki/Geometric_algebra
 [YTtuts]: https://www.youtube.com/watch?v=PNlgMPzj-7Q&list=PLpzmRsG7u_gqaTo_vEseQ7U8KFvtiJY4K
@@ -78,3 +81,4 @@ The output draws:
 [GAforCompSci]: http://www.geometricalgebra.net/
 [BSP]: https://en.wikipedia.org/wiki/Binary_space_partitioning
 [Pillow]: https://github.com/python-pillow/Pillow
+[pyganja]: https://github.com/pygae/pyganja

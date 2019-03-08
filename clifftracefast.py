@@ -158,21 +158,6 @@ class Light:
         self.colour = colour
 
 
-    def getjitLight(self):
-        return jitLight(self.position.value, self.colour)
-
-
-spec = [
-    ('position', double[:]),
-    ('colour', double[:]),
-]
-@jitclass(spec)
-class jitLight:
-    def __init__(self, position, colour):
-        self.position = position
-        self.colour = colour
-
-
 def drawScene():
     Ptr = Ptl + 2*e1*xmax
     Pbl = Ptl - 2*e3*ymax
@@ -215,7 +200,7 @@ def drawScene():
             sc.add_sphere(objects.object, objects.getColour())
         else:
             sc.add_plane(objects.object, objects.getColour())
-    for light in lights:
+    for light in Ls:
         l = light.position
         sc.add_euc_point(up(l), yellow)
         sc.add_sphere(new_sphere(l + e1, l+e2, l+e3, l-e1), yellow)
@@ -379,7 +364,7 @@ def trace_ray(ray, scene_type_array, scene_array, origin, depth):
         if intersects(toL, np.concatenate((scene_type_array[:index], scene_type_array[index+1:])),
                       np.concatenate((scene_array[:index, :], scene_array[index + 1:, :]), axis=0),
                       pX)[1] is not None:
-            Satt *= 0.8
+            Satt *= 0.4
 
         if scene_type_array[int(index)]:
             reflected = -1. * val_reflect_in_sphere(ray, obj[:32], pX)
@@ -448,20 +433,23 @@ def render(line_array):
 
 if __name__ == "__main__":
     # Light position and color.
+    Ls =[]
     lights = np.empty((1, 32+3), dtype=np.double)
     L = -20.*e1 + 60.*e3 + 4.*e2
     colour_light = np.ones(3)
     light = np.append(L.value, colour_light)
+    Ls.append(Light(L, colour_light))
     lights[0, :] = light
     L = 20.*e1 + 60.*e3 + 4.*e2
     lights = np.append(lights, np.append(L.value, colour_light).reshape(1, 35), axis = 0)
+    Ls.append(Light(L, colour_light))
 
     # Shading options
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 1600
-    h = 1200
+    w = 400
+    h = 300
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     options_val = np.array([True, True , True])
     ambient = 0.3
@@ -498,7 +486,7 @@ if __name__ == "__main__":
     # Get all of the required initial transformations
     optic_axis = new_line(cam, lookat)
     original = new_line(eo, e2)
-    MVR = generate_translation_rotor(cam)*rotor_between_lines(original, optic_axis)
+    MVR = generate_translation_rotor(cam-lookat)*rotor_between_lines(original, optic_axis)
     MVR_val = MVR.value
     dTx = MVR*generate_translation_rotor((2*xmax/(w-1))*e1)*~MVR
     dTx_val = dTx.value
@@ -508,7 +496,8 @@ if __name__ == "__main__":
     Ptl = f*1.0*e2 - e1*xmax + e3*ymax
     Ptl_val = Ptl.value
 
-    #drawScene()
+    drawScene()
+
     print("Start Ray generation")
     start_time = time.time()
     ray_array = generate_ray_array()
@@ -521,7 +510,5 @@ if __name__ == "__main__":
     start_time = time.time()
 
     im1 = Image.fromarray(render(ray_array).astype('uint8'), 'RGB')
-    im1.save('fig.png')
-
-    print("\n\n")
+    im1.save('fig1.png')
     print("--- %s seconds ---" % (time.time() - start_time))
