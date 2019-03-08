@@ -234,6 +234,9 @@ def pointofXcircle(ray_val, circle_val, origin_val):
 
 def pointofXsurface(L, C1, C2, origin):
     # Check if the ray hits the endpoints
+    hit1 = (meet(L,C1)**2)[0] < 0
+    hit2 = (meet(L,C2)**2)[0] < 0
+    hiteither = hit1 or hit2
 
     # Check each
 
@@ -258,17 +261,18 @@ def pointofXsurface(L, C1, C2, origin):
     pointofXsurface.alpha_right = zeros_crossing[1]
 
     # Check if it is in plane
-    if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.00001:
-        print("Two crossings!")
-        # Intersect as it it were a sphere
-        C = interp_objects_root(C1, C2, zeros_crossing[0])
-        S = (C * (C ^ einf).normal() * I5).normal()
-        sc = GAScene()
-        sc.add_sphere(S)
-        sc.add_line(L, cyan)
-        sc.add_circle(C, red)
-        print(sc)
-        return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
+    if not hiteither:
+        if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.00001:
+            print("Two crossings!")
+            # Intersect as it it were a sphere
+            C = interp_objects_root(C1, C2, zeros_crossing[0])
+            S = (C * (C ^ einf).normal() * I5).normal()
+            sc = GAScene()
+            sc.add_sphere(S)
+            sc.add_line(L, cyan)
+            sc.add_circle(C, red)
+            print(sc)
+            return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
 
     # Get intersection points
     p1 = meet(interp_objects_root(C1, C2, zeros_crossing[0]), L)
