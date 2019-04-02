@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 import time
 from scipy.optimize import fsolve
+import  scipy.interpolate
 
 red = 'rgb(255, 0 , 0)'
 blue = 'rgb(0, 0, 255)'
@@ -70,9 +71,44 @@ class Interp_Surface:
         self.diffuse = diffuse
         self.reflection = reflection
         self.type = "Surface"
+        self._probes = None
+        self._probe_mats = None
+        self._probe_func = None
 
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
+
+    @property
+    def probes(self):
+        if self._probes is None:
+            self._probes = [interp_objects_root(self.first, self.second, alpha) for alpha in np.linspace(0,1,100)]
+        return self._probes
+
+    @property
+    def probe_mats(self):
+        if self._probe_mats is None:
+            dual_probes = [p*I5 for p in self.probes]
+            self._probe_mats = np.array([mask4@get_left_gmt_matrix(dp.value) for dp in dual_probes])
+        return self._probe_mats
+
+    @property
+    def probe_func(self):
+        if self._probe_func is None:
+            ntcmats = len( self.probes )
+            pms = np.array([dual_func(p.value) for p in self.probes])
+            @numba.njit
+            def tcf(L):
+                output = np.zeros(ntcmats)
+                Lval = dual_func(L)
+                for i in range(ntcmats):
+                    val = omt_func(pms[i,:],Lval)
+                    output[i] = imt_func(val,val)[0]
+                return output
+            self._probe_func = tcf
+        return self._probe_func
+
+    #def intersect_with_line(self, L):
+
 
 class Light:
     def __init__(self, position, colour):
@@ -142,8 +178,10 @@ def drawScene():
 def new_sphere(p1, p2, p3, p4):
     return unsign_sphere(normalised(up(p1) ^ up(p2) ^ up(p3) ^ up(p4)))
 
+
 def new_circle(p1, p2, p3):
     return normalised(up(p1) ^ up(p2) ^ up(p3))
+
 
 def new_plane(p1, p2, p3):
     return normalised(up(p1) ^ up(p2) ^ up(p3) ^ einf)
@@ -160,6 +198,9 @@ def new_point_pair(p1, p2):
 def unsign_sphere(S):
     return normalised(S/(S.dual()|einf)[0])
 
+@numba.njit
+def val_unsign_sphere(S_val):
+    return val_normalised(S_val / imt_func(dual_func(S_val), einf.value)[0])
 
 @numba.njit
 def val_pointofXSphere(ray_val, sphere_val, origin_val):
@@ -187,10 +228,10 @@ def val_pointofXplane(ray_val, plane_val, origin_val):
     pX = val_intersect_line_and_plane_to_point(ray_val, plane_val)
     if pX[0] == -1.:
         return pX
-    new_line = omt_func(origin_val, omt_func(pX, ninf_val))
-    if abs((gmt_func(new_line, new_line))[0]) < 0.00001:
+    new_line1 = omt_func(origin_val, omt_func(pX, ninf_val))
+    if abs((gmt_func(new_line1, new_line1))[0]) < 0.00001:
         return np.array([-1.])
-    if imt_func(ray_val, val_normalised(new_line))[0] > 0:
+    if imt_func(ray_val, val_normalised(new_line1))[0] > 0:
         return pX
     return np.array([-1.])
 
@@ -231,71 +272,107 @@ def pointofXcircle(ray_val, circle_val, origin_val):
     else:
         return np.array([-1.])
 
+@numba.njit
+def val_interp_objects_root(C1_val, C2_val, alpha):
+    C_temp = (1-alpha) * C1_val + alpha * C2_val
+    return val_normalised(neg_twiddle_root_val(C_temp)[0])
 
-def pointofXsurface(L, C1, C2, origin):
+def my_interp_objects_root(C1, C2, alpha):
+    return layout.MultiVector(value = val_interp_objects_root(C1.value, C2.value, alpha))
+
+
+def pointofXsurface(L, surf, origin):
+    C1 = surf.first
+    C2 = surf.second
+
     # Check if the ray hits the endpoints
     hit1 = (meet(L,C1)**2)[0] < 0
     hit2 = (meet(L,C2)**2)[0] < 0
     hiteither = hit1 or hit2
 
     # Check each
+    zeros_crossing = [0, 1]
+
+    alpha_probe = np.linspace(0, 1, 100)
+    probe_meet = surf.probe_func(L.value)
+    alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
+    alpha_vals = alpha_spline.roots()
+    alpha_in_vals = [a for a in alpha_vals if a < 1 and a > 0]
+    success = 0
+
+    if len(alpha_in_vals) == 1:
+        zeros_crossing = [alpha_in_vals[0], alpha_in_vals[0]]
+        success = 1
+    elif len(alpha_in_vals) == 2:
+        zeros_crossing = [alpha_in_vals[0], alpha_in_vals[1]]
+        success = 1
+    elif len(alpha_in_vals) > 2:
+        success = 0
+    elif len(alpha_in_vals) < 1:
+        success = 0
 
     # Check both
     def rootfunc(alpha):
-        return [(meet(interp_objects_root(C1,C2,alpha[0]), L) ** 2)[0], (meet(interp_objects_root(C1,C2,alpha[1]), L) ** 2)[0]]
-    sol = fsolve(rootfunc, np.array([pointofXsurface.alpha_left,pointofXsurface.alpha_right]),full_output=True)
+        return [((my_interp_objects_root(C1,C2,alpha[0])*L)(4) ** 2)[0], ((my_interp_objects_root(C1,C2,alpha[1])*L)(4) ** 2)[0]]
+
+    C1val = C1.value
+    C2val = C2.value
+    Lval = L.value
+    def fast_root_func(alpha):
+        output = np.zeros(2)
+        va = project_val(gmt_func(val_interp_objects_root(C1val, C2val, alpha[0]), Lval), 4)
+        vb = project_val(gmt_func(val_interp_objects_root(C1val, C2val, alpha[1]), Lval), 4)
+        output[0] = imt_func(va, va)[0]
+        output[1] = imt_func(vb, vb)[0]
+        return output
+
+    # TODO: Need to make this non-linear solver more robust
+
+    # alpha_left and alpha_right are static function variables.
+    # Initialised at the end of this function to 0 and 1 respectively
+    sol = fsolve(fast_root_func, np.array([zeros_crossing[0], zeros_crossing[1]]),full_output=True)
     zeros_crossing = sol[0]
     success = sol[2]
 
     # Check if it misses entirely
     if success != 1:
-        print("No intersection!")
-        print(sol)
-        return np.array([-1.]), None
-    print("Two alpha values are: ")
-    print(zeros_crossing[0], zeros_crossing[1])
-    if (zeros_crossing[0] < 0 or zeros_crossing[0] > 1) and  (zeros_crossing[1] < 0 or zeros_crossing[1] > 1):
+        # print("No alpha found!")
+        # print(sol)
         return np.array([-1.]), None
 
-    pointofXsurface.alpha_left = zeros_crossing[0]
-    pointofXsurface.alpha_right = zeros_crossing[1]
+    if (zeros_crossing[0] < 0 or zeros_crossing[0] > 1) and  (zeros_crossing[1] < 0 or zeros_crossing[1] > 1):
+        # print("Returned out of bounds alpha values of: (%f,%f)" %(zeros_crossing[0], zeros_crossing[1]))
+        return np.array([-1.]), None
+
 
     # Check if it is in plane
-    if not hiteither:
-        if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.00001:
-            print("Two crossings!")
-            # Intersect as it it were a sphere
-            C = interp_objects_root(C1, C2, zeros_crossing[0])
-            S = (C * (C ^ einf).normal() * I5).normal()
-            sc = GAScene()
-            sc.add_sphere(S)
-            sc.add_line(L, cyan)
-            sc.add_circle(C, red)
-            print(sc)
-            return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
+    if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.0000001:
+        # Intersect as it it were a sphere
+        C = interp_objects_root(C1, C2, zeros_crossing[0])
+        S = (C * (C ^ einf).normal() * I5).normal()
+        return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
 
     # Get intersection points
-    p1 = meet(interp_objects_root(C1, C2, zeros_crossing[0]), L)
-    p2 = meet(interp_objects_root(C1, C2, zeros_crossing[1]), L)
+    plane1_val = val_normalised(omt_func(interp_objects_root(C1, C2, zeros_crossing[0]).value, einf.value))
+    plane2_val = val_normalised(omt_func(interp_objects_root(C1, C2, zeros_crossing[1]).value, einf.value))
 
-    p1_val = normalise_n_minus_1((p1*einf*p1)(1)).value
-    p2_val = normalise_n_minus_1((p2*einf*p2)(1)).value
+    p1_val = val_pointofXplane(L.value, plane1_val, origin.value)
+    p2_val = val_pointofXplane(L.value, plane2_val, origin.value)
 
-    # Assume for now that the points are not inside the object.
-    new_line1 = val_normalised( omt_func(origin.value, omt_func(p1_val, ninf_val)) )
-    new_line2 = val_normalised( omt_func(origin.value, omt_func(p2_val, ninf_val)) )
-    if abs((gmt_func(new_line1, new_line1))[0]) < 0.00001 or abs((gmt_func(new_line2, new_line2))[0]) < 0.00001:
+    if p1_val[0] == -1. and p2_val[0] == -1.:
         return np.array([-1.]), None
 
-    if imt_func(L.value, val_normalised(new_line1))[0] > 0:
-        if imt_func(p1_val, origin.value)[0] > imt_func(p2_val, origin.value)[0]:
-            return p1_val, zeros_crossing[0]
-        else:
-            return p2_val, zeros_crossing[1]
+    if p2_val[0] == -1.:
+        return p1_val, zeros_crossing[0]
 
-    return np.array([-1.]), None
-pointofXsurface.alpha_left = 0
-pointofXsurface.alpha_right = 1
+    if p1_val[0] == -1.:
+        return p2_val, zeros_crossing[1]
+
+    if imt_func(p1_val, origin.value)[0] > imt_func(p2_val, origin.value)[0]:
+        return p1_val, zeros_crossing[0]
+    else:
+        return p2_val, zeros_crossing[1]
+
 
 def project_points_to_circle(point_list, circle):
     """
@@ -306,7 +383,48 @@ def project_points_to_circle(point_list, circle):
     circle_points = project_points_to_sphere(planar_points, -circle*circle_plane*I5)
     return circle_points
 
-def get_normal(C1,C2,alpha,P):
+@numba.njit
+def val_differentiateLinearCircle(alpha, C1_val, C2_val):
+    X_val = alpha*C1_val + (1-alpha) * C2_val
+    phiSquared = -gmt_func(X_val, adjoint_func(X_val))
+    phiSq0 = phiSquared[0]
+    phiSq4 = project_val(phiSquared,4)
+    dotz = C1_val - C2_val
+    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C1_val,C1_val))[0]
+    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C1_val,C1_val), 4)
+    tempsqrt = np.sqrt(phiSq0 -  gmt_func(phiSq4, phiSq4)[0])
+    dott = (dotphiSq0 + (2*(phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
+    t = dotphiSq0 + tempsqrt
+    sqrt2t = np.sqrt(2*t)
+    f = t/(sqrt2t)
+    dotf = (3*dott)/(2*sqrt2t)
+    g = phiSq4/(sqrt2t)
+    dotg = (4*t*dotphiSq4 - dott *phiSq4)/(2*t*sqrt2t)
+    k = (f*f - gmt_func(g,g)[0])
+    dotk = (2*f*dotf - gmt_func(g,dotg) - gmt_func(dotg, g))[0]
+    fminusg = -g
+    fminusg[0] += f
+    dotfminusdotg = -dotg
+    dotfminusdotg[0] += f
+    term1 = k*gmt_func(fminusg, dotz)
+    term2 = k*gmt_func(dotfminusdotg, X_val)
+    term3 = dotk*gmt_func(fminusg, X_val)
+    return project_val(val_normalised(term1 + term2 + term3), 3)
+
+
+def get_analytic_normal(C1,C2,alpha,P):
+    dotC = val_differentiateLinearCircle(alpha, C2.value, C1.value)
+    dotC = layout.MultiVector(value=dotC)
+    C = interp_objects_root(C1, C2, alpha)
+    omegaC = C*dotC
+    dotP = P|omegaC
+    LT = (dotP ^ P ^ einf).normal()
+    LC = ((C|P)^einf).normal()
+    normal = (LT*LC*I5)(3).normal()
+    return normal
+
+
+def get_numerical_normal(C1, C2, alpha, P):
     Aplus = interp_objects_root(C1,C2,alpha+0.001)
     Aminus = interp_objects_root(C1,C2,alpha-0.001)
     A = interp_objects_root(C1,C2,alpha)
@@ -315,13 +433,14 @@ def get_normal(C1,C2,alpha,P):
     CA = (Pminus ^ P ^ Pplus).normal()
     Tangent_CA = ((CA | P) ^ einf).normal()
     Tangent_A = ((A | P) ^ einf).normal()
-    normal = layout.MultiVector(value = project_val((Tangent_A*Tangent_CA*I5).value, 3)).normal()
-    return normal
+    return -((Tangent_A*Tangent_CA*I5)(3)).normal()
 
 def reflect_in_surface(ray, object, pX, alpha):
-    # print(pX, alpha)
-    normal = get_normal(object.first, object.second, alpha, pX)
-    return normalised(normal + ray)
+    sc = GAScene()
+    sc.add_euc_point(pX, blue)
+    file.write(str(sc) + "\n")
+    normal = get_analytic_normal(object.first, object.second, alpha, pX)
+    return normal + ray
 
 
 def intersects(ray, scene, origin):
@@ -338,7 +457,7 @@ def intersects(ray, scene, origin):
         if obj.type == "Circle":
             pX = pointofXcircle(ray.value, obj.object.value, origin.value)
         if obj.type == "Surface":
-            pX, alpha = pointofXsurface(ray, obj.first, obj.second, origin)
+            pX, alpha = pointofXsurface(ray, obj, origin)
 
         if pX[0] == -1.: continue
         if idx == 0:
@@ -349,13 +468,19 @@ def intersects(ray, scene, origin):
             dist, index, pXfin, alphaFin = t, idx, layout.MultiVector(value=pX), alpha
     return pXfin, index, alphaFin
 
-
+file = open("intersection_points.txt", "a+")
 def trace_ray(ray, scene, origin, depth):
     pixel_col = np.zeros(3)
     pX, index, alpha = intersects(ray, scene, origin)
     if index is None:
         return background
     obj = scene[index]
+    sc = GAScene()
+    if obj.type == "Sphere":
+        sc.add_euc_point(pX)
+    else:
+        sc.add_euc_point(pX, green)
+    file.write(str(sc) + "\n")
     for light in lights:
         Satt = 1.
         upl_val = val_up(light.position.value)
@@ -378,24 +503,23 @@ def trace_ray(ray, scene, origin, depth):
         else:
             reflected = reflect_in_surface(ray, obj, pX, alpha)
 
+
         norm = normalised(reflected - ray)
 
-        tmp_scene = GAScene()
-        tmp_scene.add_line(norm, magenta)
-        tmp_scene.add_line(reflected, green)
-        print(tmp_scene)
+        # tmp_scene = GAScene()
+        # tmp_scene.add_line(ray, red)
+        # tmp_scene.add_line(norm, green)
+        # tmp_scene.add_line(reflected, green)
+        # print(tmp_scene)
 
         fatt = getfattconf(d, a1, a2, a3)
 
         if options['specular']:
-            # if obj.type == "Circle":
-            #     print(Satt * fatt * obj.specular * \
-            #              max(cosangle_between_lines(norm, normalised(toL-ray)), 0) ** obj.spec_k * light.colour)
             pixel_col += Satt * fatt * obj.specular * \
                          max(cosangle_between_lines(norm, normalised(toL-ray)), 0) ** obj.spec_k * light.colour
 
         if options['diffuse']:
-            pixel_col += Satt * fatt * obj.diffuse * max(cosangle_between_lines(norm, toL), 0) * obj.colour
+            pixel_col += Satt * fatt * obj.diffuse * max(cosangle_between_lines(norm, toL), 0) * obj.colour * light.colour
 
     if depth >= max_depth:
         return pixel_col
@@ -410,13 +534,16 @@ def render():
     img = np.zeros((h, w, 3))
     initial = RMVR(up(Ptl))
     clipped = 0
+    start_time = time.time()
     for i in range(0, w):
         if i % 1 == 0:
-            print(i/w * 100, "%")
+            t_current = time.time() - start_time
+            t_est_total = 100/(((i+1)/w * 100)/t_current)
+            print(i/w * 100, "%", t_est_total - t_current, ' seconds remaining')
         point = initial
         line = normalised(upcam ^ initial ^ einf)
         for j in range(0, h):
-            print("Pixel coords are; %d, %d" % (j, i))
+            # print("Pixel coords are; %d, %d" % (j, i))
             value = trace_ray(line, scene, upcam, 0)
             new_value = np.clip(value, 0, 1)
             if np.any(value > 1.) or np.any(value < 0.):
@@ -426,101 +553,125 @@ def render():
             line = normalised(upcam ^ point ^ einf)
 
         initial = apply_rotor(initial, dTx)
-    print("Total number of pixels clipped = %d" % clipped)
+    # print("Total number of pixels clipped = %d" % clipped)
     return img
 
 if __name__ == "__main__":
     # Light position and color.
     lights = []
-    L = -20.*e1 + 5.*e3 -10.*e2
+    L = -30. * e1 + 5. * e3 - 30. * e2
     colour_light = np.ones(3)
     lights.append(Light(L, colour_light))
-    L = 20.*e1 + 5.*e3 -10.*e2
+    L = 30. * e1 + 5. * e3 - 30. * e2
     lights.append(Light(L, colour_light))
-
 
     # Shading options
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 40
-    h = 40
+    w = 200
+    h = 150
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
-    max_depth = 2
-    background = np.zeros(3) # [66./520., 185./510., 244./510.]
+    max_depth = 0
+    background = np.zeros(3)  # [66./520., 185./510., 244./510.]
 
     # Add objects to the scene:
     scene = []
-    # scene.append(
-    #     Sphere(-2. * e1 - 7.2 * e2 + 4. * e3, 4., np.array([1., 0., 0.]), k * 1., 100., k * 1., k * 1., k * 0.))
-    # for i in range(-1, 3):
-    #     scene.append(
-    #         Sphere(i*e1 - 7.2 * e2 + 4. * e3, 4., np.array([1., 0., 0.]), k * 1., 100., k * 1., k * 1.0, k * 0.0))
-    # scene.append(
-    #     Plane(20. * e2 + e1, 20. * e2, 21. * e2, np.array([0.8, 0.8, 0.8]), k * 1., 100., k * 1., k * 1., k * 0.1))
-    #
-    # scene.append(
-    #     Circle(2*e3-10.*e2, 2*e3-5*e2, 2*e3-10*e1-10*e2, np.array([1., 0., 0.]), k * 20., 100., k * 0.01, k * 1., k * 0.))
-    #
-    # points = [2*e3-10.*e2, 2*e3-5*e2, 2*e3-10*e1-10*e2]
-    # rotate = generate_rotation_rotor(np.pi/6, e2, e3)
-    # rotate1 = generate_rotation_rotor(np.pi/2.7, e1, e2)
-    # new_points = [apply_rotor(p + 10*e2 + 15*e1, rotate) for p in points]
-    # scene.append(
-    #     Circle(new_points[0], new_points[1], new_points[2], np.array([0.2, 0.2, 0.2]), k * 1., 100., k * 0.2, k * 0.5, k * 2.)
-    # )
-    #
-    # scene.append(
-    #     Sphere(1*e2 + 8*e3 +11*e1, 2, np.array([0., 0., 1.]), k * 1., 100., k * 0.01, k * 1., k * 0.)
-    # )
-    #
-    # new_points = [apply_rotor(apply_rotor(p+ 3*e1 + 15*e2 +5*e3, rotate1), rotate) for p in points]
-    #
-    # scene.append(
-    #     Circle(new_points[0], new_points[1], new_points[2], np.array([0., 1., 0.]), k * 1., 100., k * 0.01, k * 0.5, k * 0.))
-    #
-    # scene.append(
-    #     Sphere(7*e3 + 25*e2 + 5*e1, 7., np.array([0.2, 0.2, 0.2]), k * 1., 100., k * 0.2, k * 1.0, k * 1.)
-    # )
+    rotorR1 = generate_rotation_rotor(np.pi / 6, e1, e3)
+    rotorR2 = generate_rotation_rotor(-np.pi / 8, e1, e3)
+    rotorR3 = generate_rotation_rotor(-np.pi / 4, e1, e2)
+    rotorT2 = generate_translation_rotor(10 * e1 + 3 * e3 - 3 * e2)
+    rotorT1 = generate_translation_rotor(-7 * e1)
 
-    C1 = normalised(up(-4*e3) ^ up(4*e3) ^ up(4*e2))
-
-    C2 = normalised(up(5*e1-4*e3) ^ up(5*e1+4*e3) ^ up(5*e1+4*e2))
-
-
+    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+    C2 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+    C1 = apply_rotor(C1, rotorR1)
+    C2 = apply_rotor(C2, rotorR2)
+    C2 = apply_rotor(C2, rotorR3)
+    C1 = apply_rotor(C1, rotorT1)
+    C2 = apply_rotor(C2, rotorT2)
 
     scene.append(
-        Interp_Surface(C1, C2, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
-
+    scene.append(
+        Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+    scene.append(
+        Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+    scene[1].object = C1
+    scene[2].object = C2
 
     # Camera definitions
-    cam = - 10.*e2 + 1.*e1
-    lookat = e1
+    cam = -25. * e2 + 1. * e1 + 5.5 * e3
+    lookat = e1 + 5.5 * e3
     upcam = up(cam)
     f = 1.
     xmax = 1.0
-    ymax = xmax*(h*1.0/w)
-
+    ymax = xmax * (h * 1.0 / w)
     # No need to define the up vector since we're assuming it's e3 pre-transform.
+    # TODO: Need to encorporate the "up" vector into this model
 
     start_time = time.time()
 
     # Get all of the required initial transformations
     optic_axis = new_line(cam, lookat)
     original = new_line(eo, e2)
-    MVR = generate_translation_rotor(cam-lookat)*rotor_between_lines(original, optic_axis)
-    dTx = MVR*generate_translation_rotor((2*xmax/(w-1))*e1)*~MVR
-    dTy = MVR*generate_translation_rotor(-(2*ymax/(h-1))*e3)*~MVR
+    MVR = generate_translation_rotor(cam - lookat) * rotor_between_lines(original, optic_axis)
+    dTx = MVR * generate_translation_rotor((2 * xmax / (w - 1)) * e1) * ~MVR
+    dTy = MVR * generate_translation_rotor(-(2 * ymax / (h - 1)) * e3) * ~MVR
 
-    Ptl = f*1.0*e2 - e1*xmax + e3*ymax
+    Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
     drawScene()
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestMeetingSmall.png')
+    im1.save('figtestLatest.png')
+
+    scene = [scene[0]]
+
+    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
+    im1.save('figtestLatestNoCaps.png')
+
+    """
+    Now render a sphere!
+    """
+
+    lights = []
+    L = -20. * e1 + 5. * e3 - 10. * e2
+    colour_light = np.ones(3)
+    lights.append(Light(L, colour_light))
+    L = 20. * e1 + 5. * e3 - 10. * e2
+    lights.append(Light(L, colour_light))
+
+    cam = - 10. * e2 + 1. * e1
+    lookat = e1
+    upcam = up(cam)
+
+    optic_axis = new_line(cam, lookat)
+    original = new_line(eo, e2)
+    MVR = generate_translation_rotor(cam - lookat) * rotor_between_lines(original, optic_axis)
+    dTx = MVR * generate_translation_rotor((2 * xmax / (w - 1)) * e1) * ~MVR
+    dTy = MVR * generate_translation_rotor(-(2 * ymax / (h - 1)) * e3) * ~MVR
+
+    Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
+
+    # Used to generate sphere
+    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+
+    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3) ^ up(5 * e1 + 4 * e2))
+
+    scene = []
+    scene.append(
+        Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
+    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
+    im1.save('figtestLatestSphere.png')
+    drawScene()
 
     equator_circle = (C1 + C2).normal()
 
@@ -529,79 +680,12 @@ if __name__ == "__main__":
     scene = [Sphere(0, 0, np.array([0., 0., 1.]), k * 1., 100., k * 0.5, k * 1., k * 0.)]
     scene[0].object = unsign_sphere(interp_sphere)
 
+    print("\n\nNow drawing Sphere:\n\n")
     drawScene()
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestSphereSmall.png')
+    im1.save('figtestSphere.png')
 
     print("\n\n")
     print("--- %s seconds ---" % (time.time() - start_time))
 
-
-# # Shading options
-# a1 = 0.02
-# a2 = 0.0
-# a3 = 0.002
-# w = 800
-# h = 600
-# options = {'ambient': True, 'specular': True, 'diffuse': True}
-# ambient = 0.3
-# k = 1.  # Brightness factor
-# max_depth = 2
-# background = np.zeros(3)
-#
-# # Add objects to the scene:
-# scene = []
-# scene.append(Sphere(-2.*e1 - 7.2*e2 + 4.*e3, 4., np.array([1., 0., 0.]), k*1., 100., k*1., k*1., k*0.1))
-# scene.append(Sphere(6.*e1 - 2.0*e2 + 4.*e3, 4., np.array([0., 0., 1.]), k*1., 100., k*1., k*1., k*0.1))
-# scene.append(Plane(20.*e2+ e1, 20.*e2, 21.*e2, np.array([0.8, 0.8, 0.8]), k*1., 100., k*1., k*1., k*0.1))
-#
-# # Camera definitions
-# cam = 4.*e3 - 20.*e2
-# lookat = eo
-# upcam = up(cam)
-# f = 1.
-# xmax = 1.0
-# ymax = xmax*(h*1.0/w)
-#
-# # No need to define the up vector since we're assuming it's e3 pre-transform.
-#
-# start_time = time.time()
-#
-# # Get all of the required initial transformations
-# optic_axis = new_line(cam, lookat)
-# original = new_line(eo, e2)
-# MVR = generate_translation_rotor(cam)*rotor_between_lines(original, optic_axis)
-# dTx = MVR*generate_translation_rotor((2*xmax/(w-1))*e1)*~MVR
-# dTy = MVR*generate_translation_rotor(-(2*ymax/(h-1))*e3)*~MVR
-#
-# Ptl = f*1.0*e2 - e1*xmax + e3*ymax
-#
-# images = []
-# dR = generate_rotation_rotor(np.pi/4, e3, e1)
-# L = -20.*e1 + 4.*e2
-# for i in range(1,5):
-#     lights = []
-#     lights.append(Light(L, np.ones(3)))
-#     tmp = Image.fromarray(render().astype('uint8'), 'RGB')
-#     tmp.save('./ims/frame{:02d}.png'.format(i))
-    # if i == 2:
-    #     tmp.save('frame.png')
-    # images.append(Image.fromarray(render().astype('uint8'), 'RGB'))
-
-    # L = apply_rotor(L, dR)
-#
-# for i in range(0,20):
-#     images.append(Image.open('./ims/frame{:02d}.gif'.format(i)))
-#
-# images[0].save('animation.gif',
-#                save_all=True,
-#                append_images=images[1:],
-#                duration=100,
-#                loop=0)
-#
-#
-# drawScene(Ptl, MVR, cam, lookat, scene, lights)
-#
-# print("\n\n")
-# print("--- %s seconds ---" % (time.time() - start_time))
