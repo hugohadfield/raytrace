@@ -53,15 +53,13 @@ class TestCombo(unittest.TestCase):
                     P_tru = point_pair_to_end_points(meet(L,S))[0]
                     P_tru = P_tru*einf*P_tru
                     truN = ((S*I5)^P_tru^einf).normal()
-                    if (not np.max(np.abs((truN-N).value)) < 10**-6) and (not np.max(np.abs((P_tru|P).value)) < 10**-6):
+                    if (not np.abs((truN|N)[0] - 1) < 10**-5) and (not np.max(np.abs((P_tru|P).value)) < 10**-6):
                         double_error += 1
-                        # print(P)
-                        # print(P_tru)
-                        # draw([L,P,C1,C2,P_tru, interp_objects_root(C1,C2,alpha), N, truN])
+                        # draw([L, P, C1, C2, P_tru, interp_objects_root(C1, C2, alpha), N, truN])
                         # exit()
                     elif not np.max(np.abs((P_tru|P).value)) < 10**-6:
                         hit_error += 1
-                    elif not np.max(np.abs((truN-N).value)) < 10**-6:
+                    elif not np.abs((truN|N)[0] - 1) < 10**-5:
                         normal_error += 1
                 else:
                     pps = point_pair_to_end_points(meet(S, L))
@@ -97,13 +95,13 @@ class TestCombo(unittest.TestCase):
                     P_tru = point_pair_to_end_points(meet(L,S))[0]
                     P_tru = P_tru*einf*P_tru
                     truN = ((S*I5)^P_tru^einf).normal()
-                    if (not np.max(np.abs((truN-N).value)) < 10**-6) and (not np.max(np.abs((P_tru|P).value)) < 10**-6):
+                    if (not np.abs((truN|N)[0] - 1) < 10**-6) and (not np.max(np.abs((P_tru|P).value)) < 10**-6):
                         double_error += 1
                         # draw([L, P, C1, C2, P_tru, interp_objects_root(C1, C2, alpha), N, truN])
                         # exit()
                     elif not np.max(np.abs((P_tru|P).value)) < 10**-6:
                         hit_error += 1
-                    elif not np.max(np.abs((truN-N).value)) < 10**-6:
+                    elif not np.abs((truN|N)[0] - 1) < 10**-6:
                         normal_error += 1
                 else:
                     pps = point_pair_to_end_points(meet(S,L))
@@ -127,6 +125,8 @@ class TestCombo(unittest.TestCase):
         L = (up(origin)^Cin^einf).normal()
 
         surf = Interp_Surface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
+
+        pointofXsurface(L, surf, origin)
 
         alpha_list = np.linspace(0, 1, 100)
         interp_list = [interp_objects_root(C1,C2,alpha) for alpha in alpha_list]
@@ -160,10 +160,10 @@ class TestCombo(unittest.TestCase):
         plt.show()
 
         trace_check = surf.probe_func(L.value)
-        plt.plot(alpha_list, trace_check)
+        plt.plot(surf.probe_alphas, trace_check)
         plt.show()
 
-        draw([up(origin), L, C1, C2] + interp_list)
+        #draw([up(origin), L, C1, C2] + interp_list)
 
 
 

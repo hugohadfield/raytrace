@@ -17,6 +17,38 @@ dark_blue = 'rgb(8, 0, 84)'
 db = [0.033, 0., 0.33]
 
 
+@numba.njit
+def nth_polynomial_fit(x, y, n):
+    xmat = np.zeros((n+1,n+1))
+    for i in range(n+1):
+        for j in range(n+1):
+            xmat[i,j] = x[i]**((n-j))
+    return np.linalg.solve(xmat, y)
+
+@numba.njit
+def quad(x, p):
+    return p[0]*x**2 + p[1]*x + p[2]
+
+@numba.njit
+def bisection(p, start, stop):
+    fstart = quad(start, p)
+    for __ in range(1000):
+        half = start + (stop - start)/2
+        fhalf = quad(half, p)
+        if abs(fhalf) < 1e-12:
+            return half 
+        if fhalf * fstart > 0:
+            start = half
+            fstart = quad(start, p)
+        else:
+            stop = half
+    return half
+
+@numba.njit
+def get_root(x, y):
+    poly = nth_polynomial_fit(x, y, 2)
+    return bisection(poly, x[0], x[2])
+
 class Sphere:
     def __init__(self, c, r, colour, specular, spec_k, amb, diffuse, reflection):
         self.object = new_sphere(c + r*e1, c + r*e2, c + r*e3, c - r*e1)
@@ -74,6 +106,8 @@ class Interp_Surface:
         self._probes = None
         self._probe_mats = None
         self._probe_func = None
+        self._intersection_func = None
+        self.probe_alphas = np.linspace(0,1,1000)
 
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
@@ -81,7 +115,7 @@ class Interp_Surface:
     @property
     def probes(self):
         if self._probes is None:
-            self._probes = [interp_objects_root(self.first, self.second, alpha) for alpha in np.linspace(0,1,100)]
+            self._probes = [interp_objects_root(self.first, self.second, alpha) for alpha in self.probe_alphas]
         return self._probes
 
     @property
@@ -107,7 +141,35 @@ class Interp_Surface:
             self._probe_func = tcf
         return self._probe_func
 
-    #def intersect_with_line(self, L):
+    @property
+    def intersection_func(self):
+        if self._intersection_func is None:
+            pfunc = self.probe_func
+            palphas = self.probe_alphas
+            @numba.njit
+            def intersect_line(Lval):
+                alphas = -np.ones(2)
+                res = pfunc(Lval)
+                n = 0
+                m1 = np.sign(res[0])
+                for i in range(1,len(res)):
+                    m2 = np.sign(res[i])
+                    if m2 != m1:
+                        d0 = abs(res[i-1])
+                        d1 = abs(res[i])
+                        #print(res[i-2:i+1])
+                        if i > 1:
+                            alphas[n] = get_root(palphas[i-2:i+1],res[i-2:i+1])
+                        else:
+                            alphas[n] = get_root(palphas[i-1:i+2],res[i-1:i+2])
+                        #alphas[n] = (d1*palphas[i-1] + d0*palphas[i])/(d0+d1)
+                        n = n + 1
+                        if n > 1:
+                            break
+                    m1 = m2
+                return alphas
+            self._intersection_func = intersect_line
+        return self._intersection_func
 
 
 class Light:
@@ -293,11 +355,12 @@ def pointofXsurface(L, surf, origin):
     # Check each
     zeros_crossing = [0, 1]
 
-    alpha_probe = np.linspace(0, 1, 100)
     probe_meet = surf.probe_func(L.value)
-    alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
-    alpha_vals = alpha_spline.roots()
+    alpha_vals = surf.intersection_func(L.value)
+    # alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
+    # alpha_vals = alpha_spline.roots()
     alpha_in_vals = [a for a in alpha_vals if a < 1 and a > 0]
+    # print(alpha_in_vals, alpha_vals_t)
     success = 0
 
     if len(alpha_in_vals) == 1:
@@ -311,39 +374,12 @@ def pointofXsurface(L, surf, origin):
     elif len(alpha_in_vals) < 1:
         success = 0
 
-    # Check both
-    def rootfunc(alpha):
-        return [((my_interp_objects_root(C1,C2,alpha[0])*L)(4) ** 2)[0], ((my_interp_objects_root(C1,C2,alpha[1])*L)(4) ** 2)[0]]
-
-    C1val = C1.value
-    C2val = C2.value
-    Lval = L.value
-    def fast_root_func(alpha):
-        output = np.zeros(2)
-        va = project_val(gmt_func(val_interp_objects_root(C1val, C2val, alpha[0]), Lval), 4)
-        vb = project_val(gmt_func(val_interp_objects_root(C1val, C2val, alpha[1]), Lval), 4)
-        output[0] = imt_func(va, va)[0]
-        output[1] = imt_func(vb, vb)[0]
-        return output
-
-    # TODO: Need to make this non-linear solver more robust
-
-    # alpha_left and alpha_right are static function variables.
-    # Initialised at the end of this function to 0 and 1 respectively
-    sol = fsolve(fast_root_func, np.array([zeros_crossing[0], zeros_crossing[1]]),full_output=True)
-    zeros_crossing = sol[0]
-    success = sol[2]
-
     # Check if it misses entirely
     if success != 1:
-        # print("No alpha found!")
-        # print(sol)
         return np.array([-1.]), None
 
     if (zeros_crossing[0] < 0 or zeros_crossing[0] > 1) and  (zeros_crossing[1] < 0 or zeros_crossing[1] > 1):
-        # print("Returned out of bounds alpha values of: (%f,%f)" %(zeros_crossing[0], zeros_crossing[1]))
         return np.array([-1.]), None
-
 
     # Check if it is in plane
     if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.0000001:
@@ -361,13 +397,10 @@ def pointofXsurface(L, surf, origin):
 
     if p1_val[0] == -1. and p2_val[0] == -1.:
         return np.array([-1.]), None
-
     if p2_val[0] == -1.:
         return p1_val, zeros_crossing[0]
-
     if p1_val[0] == -1.:
         return p2_val, zeros_crossing[1]
-
     if imt_func(p1_val, origin.value)[0] > imt_func(p2_val, origin.value)[0]:
         return p1_val, zeros_crossing[0]
     else:
@@ -537,9 +570,14 @@ def render():
     start_time = time.time()
     for i in range(0, w):
         if i % 1 == 0:
-            t_current = time.time() - start_time
-            t_est_total = 100/(((i+1)/w * 100)/t_current)
-            print(i/w * 100, "%", t_est_total - t_current, ' seconds remaining')
+            if i != 0:
+                t_current = time.time() - start_time
+                current_percent = (i/w * 100)
+                percent_per_second = current_percent/t_current
+                t_est_total = 100/percent_per_second
+                print(i/w * 100, "% complete", 
+                    t_current/60 , 'mins elapsed',
+                    (t_est_total - t_current)/60, ' mins remaining')
         point = initial
         line = normalised(upcam ^ initial ^ einf)
         for j in range(0, h):
@@ -569,8 +607,8 @@ if __name__ == "__main__":
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 200
-    h = 150
+    w = 100
+    h = 75
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
