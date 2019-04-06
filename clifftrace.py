@@ -107,10 +107,29 @@ class Interp_Surface:
         self._probe_mats = None
         self._probe_func = None
         self._intersection_func = None
+        self._bounding_sphere = None
         self.probe_alphas = np.linspace(0,1,1000)
 
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
+
+    @property
+    def bounding_sphere(self):
+        if self._bounding_sphere is None:
+            self._bounding_sphere = enclosing_sphere([circle_to_sphere(C) for C in self.probes])
+        return self._bounding_sphere
+
+    @property
+    def bound_func(self):
+        sphere_val = self.bounding_sphere.value
+        @numba.njit
+        def bound_hit(ray_val):
+            B = meet_val(ray_val, sphere_val)
+            if gmt_func(B, B)[0] > 0.000001:
+                return True
+            else:
+                return False
+        return bound_hit
 
     @property
     def probes(self):
@@ -146,27 +165,25 @@ class Interp_Surface:
         if self._intersection_func is None:
             pfunc = self.probe_func
             palphas = self.probe_alphas
+            bfunc = self.bound_func
             @numba.njit
             def intersect_line(Lval):
                 alphas = -np.ones(2)
-                res = pfunc(Lval)
-                n = 0
-                m1 = np.sign(res[0])
-                for i in range(1,len(res)):
-                    m2 = np.sign(res[i])
-                    if m2 != m1:
-                        d0 = abs(res[i-1])
-                        d1 = abs(res[i])
-                        #print(res[i-2:i+1])
-                        if i > 1:
-                            alphas[n] = get_root(palphas[i-2:i+1],res[i-2:i+1])
-                        else:
-                            alphas[n] = get_root(palphas[i-1:i+2],res[i-1:i+2])
-                        #alphas[n] = (d1*palphas[i-1] + d0*palphas[i])/(d0+d1)
-                        n = n + 1
-                        if n > 1:
-                            break
-                    m1 = m2
+                if bfunc(Lval):
+                    res = pfunc(Lval)
+                    n = 0
+                    m1 = np.sign(res[0])
+                    for i in range(1,len(res)):
+                        m2 = np.sign(res[i])
+                        if m2 != m1:
+                            if i > 1:
+                                alphas[n] = get_root(palphas[i-2:i+1],res[i-2:i+1])
+                            else:
+                                alphas[n] = get_root(palphas[i-1:i+2],res[i-1:i+2])
+                            n = n + 1
+                            if n > 1:
+                                break
+                        m1 = m2
                 return alphas
             self._intersection_func = intersect_line
         return self._intersection_func
@@ -355,7 +372,6 @@ def pointofXsurface(L, surf, origin):
     # Check each
     zeros_crossing = [0, 1]
 
-    probe_meet = surf.probe_func(L.value)
     alpha_vals = surf.intersection_func(L.value)
     # alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
     # alpha_vals = alpha_spline.roots()
@@ -384,13 +400,13 @@ def pointofXsurface(L, surf, origin):
     # Check if it is in plane
     if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.0000001:
         # Intersect as it it were a sphere
-        C = interp_objects_root(C1, C2, zeros_crossing[0])
+        C = my_interp_objects_root(C1, C2, zeros_crossing[0])
         S = (C * (C ^ einf).normal() * I5).normal()
         return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
 
     # Get intersection points
-    plane1_val = val_normalised(omt_func(interp_objects_root(C1, C2, zeros_crossing[0]).value, einf.value))
-    plane2_val = val_normalised(omt_func(interp_objects_root(C1, C2, zeros_crossing[1]).value, einf.value))
+    plane1_val = val_normalised(omt_func(my_interp_objects_root(C1, C2, zeros_crossing[0]).value, einf.value))
+    plane2_val = val_normalised(omt_func(my_interp_objects_root(C1, C2, zeros_crossing[1]).value, einf.value))
 
     p1_val = val_pointofXplane(L.value, plane1_val, origin.value)
     p2_val = val_pointofXplane(L.value, plane2_val, origin.value)
@@ -448,7 +464,7 @@ def val_differentiateLinearCircle(alpha, C1_val, C2_val):
 def get_analytic_normal(C1,C2,alpha,P):
     dotC = val_differentiateLinearCircle(alpha, C2.value, C1.value)
     dotC = layout.MultiVector(value=dotC)
-    C = interp_objects_root(C1, C2, alpha)
+    C = my_interp_objects_root(C1, C2, alpha)
     omegaC = C*dotC
     dotP = P|omegaC
     LT = (dotP ^ P ^ einf).normal()
@@ -458,9 +474,9 @@ def get_analytic_normal(C1,C2,alpha,P):
 
 
 def get_numerical_normal(C1, C2, alpha, P):
-    Aplus = interp_objects_root(C1,C2,alpha+0.001)
-    Aminus = interp_objects_root(C1,C2,alpha-0.001)
-    A = interp_objects_root(C1,C2,alpha)
+    Aplus = my_interp_objects_root(C1,C2,alpha+0.001)
+    Aminus = my_interp_objects_root(C1,C2,alpha-0.001)
+    A = my_interp_objects_root(C1,C2,alpha)
     Pplus = project_points_to_circle([P], Aplus)[0]
     Pminus = project_points_to_circle([P], Aminus)[0]
     CA = (Pminus ^ P ^ Pplus).normal()
@@ -594,6 +610,7 @@ def render():
     # print("Total number of pixels clipped = %d" % clipped)
     return img
 
+
 if __name__ == "__main__":
     # Light position and color.
     lights = []
@@ -607,8 +624,8 @@ if __name__ == "__main__":
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 100
-    h = 75
+    w = 800
+    h = 750
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
@@ -624,7 +641,7 @@ if __name__ == "__main__":
     rotorT1 = generate_translation_rotor(-7 * e1)
 
     C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
-    C2 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+    C2 = normalised(up(-3 * e3) ^ up(3 * e3) ^ up(3 * e2))
     C1 = apply_rotor(C1, rotorR1)
     C2 = apply_rotor(C2, rotorR2)
     C2 = apply_rotor(C2, rotorR3)
