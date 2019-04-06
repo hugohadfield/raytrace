@@ -435,30 +435,41 @@ def project_points_to_circle(point_list, circle):
 @numba.njit
 def val_differentiateLinearCircle(alpha, C1_val, C2_val):
     X_val = alpha*C1_val + (1-alpha) * C2_val
+
     phiSquared = -gmt_func(X_val, adjoint_func(X_val))
     phiSq0 = phiSquared[0]
     phiSq4 = project_val(phiSquared,4)
+
     dotz = C1_val - C2_val
-    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C1_val,C1_val))[0]
-    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C1_val,C1_val), 4)
-    tempsqrt = np.sqrt(phiSq0 -  gmt_func(phiSq4, phiSq4)[0])
-    dott = (dotphiSq0 + (2*(phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
-    t = dotphiSq0 + tempsqrt
+    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val))[0]
+    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val), 4)
+
+    tempsqrt = np.sqrt(phiSq0**2 -  gmt_func(phiSq4, phiSq4)[0])
+    dott = (dotphiSq0 + ((phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
+
+    t = phiSq0 + tempsqrt
     sqrt2t = np.sqrt(2*t)
+
     f = t/(sqrt2t)
     dotf = (3*dott)/(2*sqrt2t)
+
     g = phiSq4/(sqrt2t)
     dotg = (4*t*dotphiSq4 - dott *phiSq4)/(2*t*sqrt2t)
+
     k = (f*f - gmt_func(g,g)[0])
+
     dotk = (2*f*dotf - gmt_func(g,dotg) - gmt_func(dotg, g))[0]
+
     fminusg = -g
     fminusg[0] += f
     dotfminusdotg = -dotg
-    dotfminusdotg[0] += f
-    term1 = k*gmt_func(fminusg, dotz)
+    dotfminusdotg[0] += dotf
+    term1 = k*gmt_func(dotz, fminusg)
     term2 = k*gmt_func(dotfminusdotg, X_val)
-    term3 = dotk*gmt_func(fminusg, X_val)
-    return project_val(val_normalised(term1 + term2 + term3), 3)
+    term3 = -dotk*gmt_func(fminusg, X_val)
+    Calphadot = val_normalised(project_val(term1 + term2 + term3, 3))
+
+    return Calphadot
 
 
 def get_analytic_normal(C1,C2,alpha,P):
@@ -467,8 +478,8 @@ def get_analytic_normal(C1,C2,alpha,P):
     C = my_interp_objects_root(C1, C2, alpha)
     omegaC = C*dotC
     dotP = P|omegaC
-    LT = (dotP ^ P ^ einf).normal()
-    LC = ((C|P)^einf).normal()
+    LT = (dotP ^ P ^ einf)
+    LC = ((C|P)^einf)
     normal = (LT*LC*I5)(3).normal()
     return normal
 
@@ -479,16 +490,35 @@ def get_numerical_normal(C1, C2, alpha, P):
     A = my_interp_objects_root(C1,C2,alpha)
     Pplus = project_points_to_circle([P], Aplus)[0]
     Pminus = project_points_to_circle([P], Aminus)[0]
-    CA = (Pminus ^ P ^ Pplus).normal()
-    Tangent_CA = ((CA | P) ^ einf).normal()
-    Tangent_A = ((A | P) ^ einf).normal()
+    CA = (Pminus ^ P ^ Pplus)
+    Tangent_CA = ((CA | P) ^ einf)
+    Tangent_A = ((A | P) ^ einf)
     return -((Tangent_A*Tangent_CA*I5)(3)).normal()
+
+from pyganja import *
 
 def reflect_in_surface(ray, object, pX, alpha):
     sc = GAScene()
     sc.add_euc_point(pX, blue)
     file.write(str(sc) + "\n")
-    normal = get_analytic_normal(object.first, object.second, alpha, pX)
+    normal1 = normalised( get_analytic_normal(object.first, object.second, alpha, pX) )
+    normal2 = normalised( get_numerical_normal(object.first, object.second, alpha, pX) )
+    normal = normal1
+    print('\n')
+    print(normal1)
+    print(normal2)
+    print('\n')
+
+    gs = GanjaScene()
+    local_surface = [interp_objects_root(object.first, object.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
+    gs.add_objects(local_surface)
+    gs.add_objects([object.first, object.second])
+    gs.add_objects([pX],color=Color.CYAN)
+    gs.add_objects([ray],color=Color.BLUE)
+    gs.add_objects([normal1],color=Color.RED)
+    gs.add_objects([normal2],color=Color.GREEN)
+    draw(gs, scale=0.05)
+    exit()
     return normal + ray
 
 
@@ -624,8 +654,8 @@ if __name__ == "__main__":
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 800
-    h = 750
+    w = 100
+    h = 75
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
@@ -681,7 +711,9 @@ if __name__ == "__main__":
 
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
+    print('\n\n\n\nRENDERING THIS \n\n\n\n')
     drawScene()
+    print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
     im1.save('figtestLatest.png')
