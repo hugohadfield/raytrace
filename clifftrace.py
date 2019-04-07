@@ -504,21 +504,21 @@ def reflect_in_surface(ray, object, pX, alpha):
     normal1 = normalised( get_analytic_normal(object.first, object.second, alpha, pX) )
     normal2 = normalised( get_numerical_normal(object.first, object.second, alpha, pX) )
     normal = normal1
-    print('\n')
-    print(normal1)
-    print(normal2)
-    print('\n')
+    # print('\n')
+    # print(normal1)
+    # print(normal2)
+    # print('\n')
 
-    gs = GanjaScene()
-    local_surface = [interp_objects_root(object.first, object.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
-    gs.add_objects(local_surface)
-    gs.add_objects([object.first, object.second])
-    gs.add_objects([pX],color=Color.CYAN)
-    gs.add_objects([ray],color=Color.BLUE)
-    gs.add_objects([normal1],color=Color.RED)
-    gs.add_objects([normal2],color=Color.GREEN)
-    draw(gs, scale=0.05)
-    exit()
+    # gs = GanjaScene()
+    # local_surface = [interp_objects_root(object.first, object.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
+    # gs.add_objects(local_surface)
+    # gs.add_objects([object.first, object.second])
+    # gs.add_objects([pX],color=Color.CYAN)
+    # gs.add_objects([ray],color=Color.BLUE)
+    # gs.add_objects([normal1],color=Color.RED)
+    # gs.add_objects([normal2],color=Color.GREEN)
+    # draw(gs, scale=0.05)
+    # exit()
     return normal + ray
 
 
@@ -716,12 +716,12 @@ if __name__ == "__main__":
     print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestLatest.png')
+    im1.save('figtestLatestNumerical.png')
 
     scene = [scene[0]]
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestLatestNoCaps.png')
+    im1.save('figtestLatestNoCapsNumerical.png')
 
     """
     Now render a sphere!
@@ -757,7 +757,7 @@ if __name__ == "__main__":
     )
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestLatestSphere.png')
+    im1.save('figtestLatestSphereNumerical.png')
     drawScene()
 
     equator_circle = (C1 + C2).normal()
