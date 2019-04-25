@@ -168,7 +168,10 @@ class Interp_Surface:
             bfunc = self.bound_func
             @numba.njit
             def intersect_line(Lval):
-                alphas = -np.ones(2)
+                """
+                Evaluate the probes and get the (up to 4) crossing points
+                """
+                alphas = -np.ones(4)
                 if bfunc(Lval):
                     res = pfunc(Lval)
                     n = 0
@@ -181,7 +184,7 @@ class Interp_Surface:
                             else:
                                 alphas[n] = get_root(palphas[i-1:i+2],res[i-1:i+2])
                             n = n + 1
-                            if n > 1:
+                            if n > 3:
                                 break
                         m1 = m2
                 return alphas
@@ -370,7 +373,7 @@ def pointofXsurface(L, surf, origin):
     hiteither = hit1 or hit2
 
     # Check each
-    zeros_crossing = [0, 1]
+    zeros_crossing = [0, 0, 0, 0]
 
     alpha_vals = surf.intersection_func(L.value)
     # alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
@@ -379,48 +382,29 @@ def pointofXsurface(L, surf, origin):
     # print(alpha_in_vals, alpha_vals_t)
     success = 0
 
-    if len(alpha_in_vals) == 1:
-        zeros_crossing = [alpha_in_vals[0], alpha_in_vals[0]]
-        success = 1
-    elif len(alpha_in_vals) == 2:
-        zeros_crossing = [alpha_in_vals[0], alpha_in_vals[1]]
-        success = 1
-    elif len(alpha_in_vals) > 2:
-        success = 0
-    elif len(alpha_in_vals) < 1:
-        success = 0
-
     # Check if it misses entirely
-    if success != 1:
+    if len(alpha_in_vals) < 1:
         return np.array([-1.]), None
 
-    if (zeros_crossing[0] < 0 or zeros_crossing[0] > 1) and  (zeros_crossing[1] < 0 or zeros_crossing[1] > 1):
-        return np.array([-1.]), None
+    # Calc the intersection points
+    intersection_points = np.zeros((len(alpha_in_vals),32))
+    for i,alp in enumerate(alpha_in_vals):
 
-    # Check if it is in plane
-    if np.abs(zeros_crossing[0] - zeros_crossing[1]) < 0.0000001:
-        # Intersect as it it were a sphere
-        C = my_interp_objects_root(C1, C2, zeros_crossing[0])
-        S = (C * (C ^ einf).normal() * I5).normal()
-        return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value), zeros_crossing[0]
+        # For each alpha val make the plane associated with it
+        interp_circle = my_interp_objects_root(C1, C2, alp)
+        plane1_val = val_normalised(omt_func(interp_circle.value, einf.value))
 
-    # Get intersection points
-    plane1_val = val_normalised(omt_func(my_interp_objects_root(C1, C2, zeros_crossing[0]).value, einf.value))
-    plane2_val = val_normalised(omt_func(my_interp_objects_root(C1, C2, zeros_crossing[1]).value, einf.value))
+        # Check if the line lies in this plane
+        if np.sum(np.abs(project_val(gmt_func(plane1_val,L.value), 3))) < 1E-5:
+            # Intersect as it it were a sphere
+            S = (interp_circle * (interp_circle ^ einf).normal() * I5).normal()
+            intersection_points[i, :] = val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value)
+        else:
+            intersection_points[i, :] = val_pointofXplane(L.value, plane1_val, origin.value)
 
-    p1_val = val_pointofXplane(L.value, plane1_val, origin.value)
-    p2_val = val_pointofXplane(L.value, plane2_val, origin.value)
-
-    if p1_val[0] == -1. and p2_val[0] == -1.:
-        return np.array([-1.]), None
-    if p2_val[0] == -1.:
-        return p1_val, zeros_crossing[0]
-    if p1_val[0] == -1.:
-        return p2_val, zeros_crossing[1]
-    if imt_func(p1_val, origin.value)[0] > imt_func(p2_val, origin.value)[0]:
-        return p1_val, zeros_crossing[0]
-    else:
-        return p2_val, zeros_crossing[1]
+    # Calc the closest intersection point to the origin
+    closest_ind = int(np.argmax([imt_func(p, origin.value)[0] for p in intersection_points]))
+    return intersection_points[closest_ind, :], alpha_in_vals[closest_ind]
 
 
 def project_points_to_circle(point_list, circle):
@@ -670,13 +654,17 @@ if __name__ == "__main__":
     rotorT2 = generate_translation_rotor(10 * e1 + 3 * e3 - 3 * e2)
     rotorT1 = generate_translation_rotor(-7 * e1)
 
-    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
-    C2 = normalised(up(-3 * e3) ^ up(3 * e3) ^ up(3 * e2))
-    C1 = apply_rotor(C1, rotorR1)
-    C2 = apply_rotor(C2, rotorR2)
-    C2 = apply_rotor(C2, rotorR3)
-    C1 = apply_rotor(C1, rotorT1)
-    C2 = apply_rotor(C2, rotorT2)
+    # C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+    # C2 = normalised(up(-3 * e3) ^ up(3 * e3) ^ up(3 * e2))
+    # C1 = apply_rotor(C1, rotorR1)
+    # C2 = apply_rotor(C2, rotorR2)
+    # C2 = apply_rotor(C2, rotorR3)
+    # C1 = apply_rotor(C1, rotorT1)
+    # C2 = apply_rotor(C2, rotorT2)
+
+    D1 = generate_dilation_rotor(0.5)
+    C1 = normalised(D1*random_circle()*~D1)
+    C2 = normalised(D1*random_circle()*~D1)
 
     scene.append(
         Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
