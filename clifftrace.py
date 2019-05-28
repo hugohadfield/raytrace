@@ -178,7 +178,7 @@ class Interp_Surface:
                     m1 = np.sign(res[0])
                     for i in range(1,len(res)):
                         m2 = np.sign(res[i])
-                        if m2 != m1:
+                        if m2 != m1: # The normal case is a change of sign
                             if i > 1:
                                 alphas[n] = get_root(palphas[i-2:i+1],res[i-2:i+1])
                             else:
@@ -342,7 +342,7 @@ def PointsFromPP(mv):
 
 
 def reflect_in_sphere(ray, sphere, pX):
-        return normalised((pX|(sphere*ray*sphere))^einf)
+    return normalised((pX|(sphere*ray*sphere))^einf)
 
 
 def pointofXcircle(ray_val, circle_val, origin_val):
@@ -367,20 +367,8 @@ def pointofXsurface(L, surf, origin):
     C1 = surf.first
     C2 = surf.second
 
-    # Check if the ray hits the endpoints
-    hit1 = (meet(L,C1)**2)[0] < 0
-    hit2 = (meet(L,C2)**2)[0] < 0
-    hiteither = hit1 or hit2
-
-    # Check each
-    zeros_crossing = [0, 0, 0, 0]
-
     alpha_vals = surf.intersection_func(L.value)
-    # alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
-    # alpha_vals = alpha_spline.roots()
     alpha_in_vals = [a for a in alpha_vals if a < 1 and a > 0]
-    # print(alpha_in_vals, alpha_vals_t)
-    success = 0
 
     # Check if it misses entirely
     if len(alpha_in_vals) < 1:
@@ -395,9 +383,9 @@ def pointofXsurface(L, surf, origin):
         plane1_val = val_normalised(omt_func(interp_circle.value, einf.value))
 
         # Check if the line lies in this plane
-        if np.sum(np.abs(project_val(gmt_func(plane1_val,L.value), 3))) < 1E-5:
+        if np.sum(np.abs(meet(interp_circle, L).value)) < 1E-3:
             # Intersect as it it were a sphere
-            S = (interp_circle * (interp_circle ^ einf).normal() * I5).normal()
+            S = circle_to_sphere(interp_circle)
             intersection_points[i, :] = val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value)
         else:
             intersection_points[i, :] = val_pointofXplane(L.value, plane1_val, origin.value)
@@ -415,6 +403,7 @@ def project_points_to_circle(point_list, circle):
     planar_points = project_points_to_plane(point_list,circle_plane)
     circle_points = project_points_to_sphere(planar_points, -circle*circle_plane*I5)
     return circle_points
+
 
 @numba.njit
 def val_differentiateLinearCircle(alpha, C1_val, C2_val):
@@ -486,7 +475,7 @@ def reflect_in_surface(ray, object, pX, alpha):
     sc.add_euc_point(pX, blue)
     file.write(str(sc) + "\n")
     normal1 = normalised( get_analytic_normal(object.first, object.second, alpha, pX) )
-    normal2 = normalised( get_numerical_normal(object.first, object.second, alpha, pX) )
+    #normal2 = normalised( get_numerical_normal(object.first, object.second, alpha, pX) )
     normal = normal1
     # print('\n')
     # print(normal1)
@@ -503,7 +492,7 @@ def reflect_in_surface(ray, object, pX, alpha):
     # gs.add_objects([normal2],color=Color.GREEN)
     # draw(gs, scale=0.05)
     # exit()
-    return normal + ray
+    return normalised(-normal*ray*normal)
 
 
 def intersects(ray, scene, origin):
@@ -638,12 +627,13 @@ if __name__ == "__main__":
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 100
-    h = 75
+    w = 150
+    h = 100
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
-    max_depth = 0
+    max_depth = 2 # Maximum number of ray bounces
+
     background = np.zeros(3)  # [66./520., 185./510., 244./510.]
 
     # Add objects to the scene:
@@ -665,6 +655,12 @@ if __name__ == "__main__":
     D1 = generate_dilation_rotor(0.5)
     C1 = normalised(D1*random_circle()*~D1)
     C2 = normalised(D1*random_circle()*~D1)
+
+    # C2 = (0.20644 ^ e123) - (0.97402 ^ e124) - (1.02403 ^ e125) + (1.2673 ^ e134) + (1.42435 ^ e135) - (
+    #             0.43396 ^ e145) + (0.72116 ^ e234) + (0.72115 ^ e235) + (0.1748 ^ e245) - (0.54873 ^ e345)
+    #
+    # C1 = -(0.08888 ^ e123) - (0.73918 ^ e124) - (0.74995 ^ e125) + (1.02278 ^ e134) + (0.99777 ^ e135) - (
+    #             0.33188 ^ e145) + (2.14836 ^ e234) + (2.05378 ^ e235) - (1.04675 ^ e245) + (0.48378 ^ e345)
 
     scene.append(
         Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
@@ -703,7 +699,10 @@ if __name__ == "__main__":
     drawScene()
     print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
-    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
+    imrendered = render()
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+    im1 = Image.fromarray(imrendered.astype('uint8'), 'RGB')
     im1.save('figtestLatestNumerical.png')
 
     scene = [scene[0]]
