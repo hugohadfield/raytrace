@@ -396,7 +396,7 @@ class PointPairSurface(InterpSurface):
         Finds an approximate bounding sphere for a set of circles
         """
         if self._bounding_sphere is None:
-            self._bounding_sphere = normalised(self.first ^ self.second)
+            self._bounding_sphere = unsign_sphere(self.first ^ self.second)
         return self._bounding_sphere
 
     def intersect_at_alpha(self, L, origin, alpha):
@@ -762,7 +762,28 @@ def render():
     return img
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
+
+
+    """
+    Render a random scene
+    """
     # Light position and color.
     lights = []
     L = -30. * e1 + 5. * e3 - 30. * e2
@@ -786,41 +807,12 @@ if __name__ == "__main__":
 
     # Add objects to the scene:
     scene = []
-    rotorR1 = generate_rotation_rotor(np.pi / 6, e1, e3)
-    rotorR2 = generate_rotation_rotor(-np.pi / 8, e1, e3)
-    rotorR3 = generate_rotation_rotor(-np.pi / 4, e1, e2)
-    rotorT2 = generate_translation_rotor(10 * e1 + 3 * e3 - 3 * e2)
-    rotorT1 = generate_translation_rotor(-7 * e1)
-
-    # C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
-    # C2 = normalised(up(-3 * e3) ^ up(3 * e3) ^ up(3 * e2))
-    # C1 = apply_rotor(C1, rotorR1)
-    # C2 = apply_rotor(C2, rotorR2)
-    # C2 = apply_rotor(C2, rotorR3)
-    # C1 = apply_rotor(C1, rotorT1)
-    # C2 = apply_rotor(C2, rotorT2)
-
     D1 = generate_dilation_rotor(0.5)
     C1 = normalised(D1*random_point_pair()*~D1)
     C2 = normalised(D1*random_point_pair()*~D1)
-
-    # C2 = (0.20644 ^ e123) - (0.97402 ^ e124) - (1.02403 ^ e125) + (1.2673 ^ e134) + (1.42435 ^ e135) - (
-    #             0.43396 ^ e145) + (0.72116 ^ e234) + (0.72115 ^ e235) + (0.1748 ^ e245) - (0.54873 ^ e345)
-    #
-    # C1 = -(0.08888 ^ e123) - (0.73918 ^ e124) - (0.74995 ^ e125) + (1.02278 ^ e134) + (0.99777 ^ e135) - (
-    #             0.33188 ^ e145) + (2.14836 ^ e234) + (2.05378 ^ e235) - (1.04675 ^ e245) + (0.48378 ^ e345)
-
     scene.append(
         PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
-    # scene.append(
-    #     Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    # )
-    # scene.append(
-    #     Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    # )
-    # scene[1].object = C1
-    # scene[2].object = C2
 
     # Camera definitions
     cam = -25. * e2 + 1. * e1 + 5.5 * e3
@@ -829,8 +821,9 @@ if __name__ == "__main__":
     f = 1.
     xmax = 1.0
     ymax = xmax * (h * 1.0 / w)
-    # No need to define the up vector since we're assuming it's e3 pre-transform.
-    # TODO: Need to encorporate the "up" vector into this model
+
+
+
 
     start_time = time.time()
 
@@ -851,16 +844,18 @@ if __name__ == "__main__":
     print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
     print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
     im1 = Image.fromarray(imrendered.astype('uint8'), 'RGB')
-    im1.save('figtestLatestNumerical.png')
+    im1.save('randomSurface.png')
 
-    scene = [scene[0]]
+    print("\n\n")
+    print("--- %s seconds ---" % (time.time() - start_time))
 
-    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestLatestNoCapsNumerical.png')
+
+
 
     """
-    Now render a sphere!
+    Now render a fixed scene
     """
+    start_time = time.time()
 
     lights = []
     L = -20. * e1 + 5. * e3 - 10. * e2
@@ -881,35 +876,20 @@ if __name__ == "__main__":
 
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
-    # # Used to generate sphere
-    # C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4*e2))
-    #
-    # C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3)^up(5*e1 + 4*e2))
 
-    C1 = normalised(up(-4 * e3) ^ up(4 * e3))
-    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3))
+    C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
+    C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
 
     scene = []
     scene.append(
         PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
+    print('\n\n\n\nRENDERING THIS \n\n\n\n')
+    drawScene()
+    print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestLatestSphereNumerical.png')
-    #drawScene()
-
-    equator_circle = (C1 + C2).normal()
-
-    interp_sphere = (equator_circle * (equator_circle ^ einf).normal() * I5).normal()
-
-    scene = [Sphere(0, 0, np.array([0., 0., 1.]), k * 1., 100., k * 0.5, k * 1., k * 0.)]
-    scene[0].object = unsign_sphere(interp_sphere)
-
-    print("\n\nNow drawing Sphere:\n\n")
-    #drawScene()
-
-    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('figtestSphere.png')
+    im1.save('standardPointPairScene.png')
 
     print("\n\n")
     print("--- %s seconds ---" % (time.time() - start_time))
