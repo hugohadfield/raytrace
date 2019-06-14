@@ -330,10 +330,14 @@ class CircleSurface(InterpSurface):
         else:
             return val_pointofXplane(L.value, plane1_val, origin.value)
 
-    def get_analytic_normal(self, C1, C2, alpha, P):
-        dotC = val_differentiateLinearCircle(alpha, C2.value, C1.value)
+    def get_analytic_normal(self, alpha, P):
+        """
+        Get the normal at of the surface at the point P that corresponds to alpha
+        Via a closed form expression
+        """
+        dotC = val_differentiateLinearCircle(alpha, self.second.value, self.first.value)
         dotC = layout.MultiVector(value=dotC)
-        C = my_interp_objects_root(C1, C2, alpha)
+        C = my_interp_objects_root(self.first, self.second, alpha)
         omegaC = C * dotC
         dotP = P | omegaC
         LT = (dotP ^ P ^ einf)
@@ -341,37 +345,27 @@ class CircleSurface(InterpSurface):
         normal = (LT * LC * I5)(3).normal()
         return normal
 
-    def get_numerical_normal(self, C1, C2, alpha, P):
-        Aplus = my_interp_objects_root(C1, C2, alpha + 0.001)
-        Aminus = my_interp_objects_root(C1, C2, alpha - 0.001)
-        A = my_interp_objects_root(C1, C2, alpha)
+    def get_numerical_normal(self, alpha, P):
+        """
+        Get the normal at of the surface at the point P that corresponds to alpha
+        Via numerical techniques
+        """
+        Aplus = my_interp_objects_root(self.first, self.second, alpha + 0.001)
+        Aminus = my_interp_objects_root(self.first, self.second, alpha - 0.001)
+        A = my_interp_objects_root(self.first, self.second, alpha)
         Pplus = project_points_to_circle([P], Aplus)[0]
         Pminus = project_points_to_circle([P], Aminus)[0]
         CA = (Pminus ^ P ^ Pplus)
         Tangent_CA = ((CA | P) ^ einf)
         Tangent_A = ((A | P) ^ einf)
-        return -((Tangent_A * Tangent_CA * I5)(3)).normal()
+        return -normalised((Tangent_A * Tangent_CA * I5)(3))
 
     def reflect_line(self, L, pX, alpha):
-        normal1 = normalised(self.get_analytic_normal(self.first, self.second, alpha, pX))
-        # normal2 = normalised( self.get_numerical_normal(self.first, self.second, alpha, pX) )
-        normal = normal1
-        # print('\n')
-        # print(normal1)
-        # print(normal2)
-        # print('\n')
-
-        # gs = GanjaScene()
-        # local_surface = [interp_objects_root(self.first, self.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
-        # gs.add_objects(local_surface)
-        # gs.add_objects([self.first, self.second])
-        # gs.add_objects([pX],color=Color.CYAN)
-        # gs.add_objects([ray],color=Color.BLUE)
-        # gs.add_objects([normal1],color=Color.RED)
-        # gs.add_objects([normal2],color=Color.GREEN)
-        # draw(gs, scale=0.05)
-        # exit()
-        return normalised(-normal * L * normal)
+        """
+        Reflects a line in the surface
+        """
+        normal = normalised(self.get_analytic_normal(alpha, pX))
+        return normalised((-normal * L * normal)(3))
 
 
 class PointPairSurface(InterpSurface):
@@ -420,6 +414,28 @@ class PointPairSurface(InterpSurface):
         point_val = midpoint_between_lines(L, ppl).value
 
         return point_val
+
+    def get_numerical_normal(self, alpha, P):
+        """
+        Get the normal at of the surface at the point P that corresponds to alpha
+        Via numerical techniques
+        """
+        Aplus = normalised(my_interp_objects_root(self.first, self.second, alpha + 0.001)^einf)
+        Aminus = normalised(my_interp_objects_root(self.first, self.second, alpha - 0.001)^einf)
+        A = my_interp_objects_root(self.first, self.second, alpha)
+        Pplus = project_points_to_line([P], Aplus)[0]
+        Pminus = project_points_to_line([P], Aminus)[0]
+        CA = (Pminus ^ P ^ Pplus)
+        Tangent_CA = ((CA | P) ^ einf)
+        Tangent_A = normalised(A^einf)
+        return -normalised((Tangent_A * Tangent_CA * I5)(3))
+
+    def reflect_line(self, L, pX, alpha):
+        """
+        Reflects a line in the surface
+        """
+        normal = normalised(self.get_numerical_normal(alpha, pX))
+        return normalised((-normal * L * normal)(3))
 
 
 class Light:
@@ -474,10 +490,10 @@ def drawScene():
             sc.add_circle(objects.object, objects.getColour())
         else:
             col = objects.getColour()
-            sc.add_circle(objects.first, col)
-            sc.add_circle(objects.second, col)
+            sc.add_point_pair(objects.first, col)
+            sc.add_point_pair(objects.second, col)
             for circles in [interp_objects_root(objects.first, objects.second, alpha/100) for alpha in range(1,100,20)]:
-                sc.add_circle(circles, col)
+                sc.add_point_pair(circles, col)
 
     for light in lights:
         l = light.position
@@ -785,8 +801,8 @@ if __name__ == "__main__":
     # C2 = apply_rotor(C2, rotorT2)
 
     D1 = generate_dilation_rotor(0.5)
-    C1 = normalised(D1*random_circle()*~D1)
-    C2 = normalised(D1*random_circle()*~D1)
+    C1 = normalised(D1*random_point_pair()*~D1)
+    C2 = normalised(D1*random_point_pair()*~D1)
 
     # C2 = (0.20644 ^ e123) - (0.97402 ^ e124) - (1.02403 ^ e125) + (1.2673 ^ e134) + (1.42435 ^ e135) - (
     #             0.43396 ^ e145) + (0.72116 ^ e234) + (0.72115 ^ e235) + (0.1748 ^ e245) - (0.54873 ^ e345)
@@ -795,16 +811,16 @@ if __name__ == "__main__":
     #             0.33188 ^ e145) + (2.14836 ^ e234) + (2.05378 ^ e235) - (1.04675 ^ e245) + (0.48378 ^ e345)
 
     scene.append(
-        CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
-    scene.append(
-        Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    )
-    scene.append(
-        Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    )
-    scene[1].object = C1
-    scene[2].object = C2
+    # scene.append(
+    #     Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    # )
+    # scene.append(
+    #     Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    # )
+    # scene[1].object = C1
+    # scene[2].object = C2
 
     # Camera definitions
     cam = -25. * e2 + 1. * e1 + 5.5 * e3
@@ -865,14 +881,17 @@ if __name__ == "__main__":
 
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
-    # Used to generate sphere
-    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4*e2))
+    # # Used to generate sphere
+    # C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4*e2))
+    #
+    # C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3)^up(5*e1 + 4*e2))
 
-    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3)^up(5*e1 + 4*e2))
+    C1 = normalised(up(-4 * e3) ^ up(4 * e3))
+    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3))
 
     scene = []
     scene.append(
-        CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
