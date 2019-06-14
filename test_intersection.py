@@ -37,7 +37,7 @@ class TestCombo(unittest.TestCase):
         C2 = (up(-e1 + e2)^up(-e1 -e2)^up(-e1 + e3)).normal()
         S = unsign_sphere(C1.join(C2)(4)).normal()
 
-        surf = Interp_Surface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
+        surf = CircleSurface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
 
         hit_error = 0
         normal_error = 0
@@ -80,7 +80,7 @@ class TestCombo(unittest.TestCase):
         C2 = (up(-e1 + e2)^up(-e1 -e2)^up(-e1 + e3)).normal()
         S = unsign_sphere(C1.join(C2)(4)).normal()
 
-        surf = Interp_Surface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
+        surf = CircleSurface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
 
         hit_error = 0
         normal_error = 0
@@ -124,7 +124,7 @@ class TestCombo(unittest.TestCase):
         Cin = up(down((C1 + C2)*einf*(C1 + C2))+e1)
         L = (up(origin)^Cin^einf).normal()
 
-        surf = Interp_Surface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
+        surf = CircleSurface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
 
         pointofXsurface(L, surf, origin)
 

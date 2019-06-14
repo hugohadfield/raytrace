@@ -1,5 +1,8 @@
 from clifford.tools.g3c import *
 from clifford.tools.g3c.GAOnline import *
+
+from pyganja import *
+
 import numpy as np
 from PIL import Image
 import time
@@ -19,18 +22,29 @@ db = [0.033, 0., 0.33]
 
 @numba.njit
 def nth_polynomial_fit(x, y, n):
+    """
+    Fits an nth order polynomial to x and y
+    """
     xmat = np.zeros((n+1,n+1))
     for i in range(n+1):
         for j in range(n+1):
             xmat[i,j] = x[i]**((n-j))
     return np.linalg.solve(xmat, y)
 
+
 @numba.njit
 def quad(x, p):
+    """
+    Evaluates the quadratic p at x
+    """
     return p[0]*x**2 + p[1]*x + p[2]
+
 
 @numba.njit
 def bisection(p, start, stop):
+    """
+    Bisects start -> stop looking for roots of qudratic p
+    """
     fstart = quad(start, p)
     for __ in range(1000):
         half = start + (stop - start)/2
@@ -44,10 +58,15 @@ def bisection(p, start, stop):
             stop = half
     return half
 
+
 @numba.njit
 def get_root(x, y):
+    """
+    Finds the root of y over the range of x
+    """
     poly = nth_polynomial_fit(x, y, 2)
     return bisection(poly, x[0], x[2])
+
 
 class Sphere:
     def __init__(self, c, r, colour, specular, spec_k, amb, diffuse, reflection):
@@ -62,6 +81,18 @@ class Sphere:
 
     def getColour(self):
         return "rgb(%d, %d, %d)"% (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
+
+    def intersection_point(self, L, origin):
+        """
+        Given there is an intersection this returns the point of intersection
+        """
+        return pointofXsphere(L, self.object, origin), None
+
+    def reflect_line(self, L, pX, alpha):
+        """
+        Given there is an intersection this reflects the line off the object
+        """
+        return -1.*reflect_in_sphere(L, self.object, pX)
 
 
 class Plane:
@@ -78,6 +109,19 @@ class Plane:
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
 
+    def intersection_point(self, L, origin):
+        """
+        Given there is an intersection this returns the point of intersection
+        """
+        return pointofXplane(L, self.object, origin), None
+
+    def reflect_line(self, L, pX, alpha):
+        """
+        Given there is an intersection this reflects the line off the object
+        """
+        return layout.MultiVector(value=(gmt_func(gmt_func(self.object.value, L.value), self.object.value)))
+
+
 class Circle:
     def __init__(self, p1, p2, p3, colour, specular, spec_k, amb, diffuse, reflection):
         self.object = -new_circle(p1, p2, p3)
@@ -92,11 +136,22 @@ class Circle:
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
 
+    def intersection_point(self, L, origin):
+        """
+        Given there is an intersection this returns the point of intersection
+        """
+        return pointofXcircle(L, self.object, origin), None
+
+    def reflect_line(self, L, pX, alpha):
+        """
+        Given there is an intersection this reflects the line off the object
+        """
+        return layout.MultiVector(value=(gmt_func(gmt_func(val_normalised(
+            omt_func(self.object.value, einf.value)), L.value),
+            val_normalised(omt_func(self.object.value, einf.value)))))
 
 
-
-
-class Interp_Surface:
+class InterpSurface:
     def __init__(self, C1, C2, colour, specular, spec_k, amb, diffuse, reflection):
         self.first = C1
         self.second = C2
@@ -142,6 +197,14 @@ class Interp_Surface:
         This is specific per type of evolution object and hence needs overwriting
         """
         raise NotImplementedError('probe_func has not been defined in the child class')
+
+    def reflect_line(self, L, pX, alpha):
+        """
+        Given there is an intersection this reflects the line off the object
+
+        This is specific per type of evolution object and hence needs overwriting
+        """
+        pass
 
     @property
     def bound_func(self):
@@ -216,7 +279,7 @@ class Interp_Surface:
         return intersection_points[closest_ind, :], alpha_in_vals[closest_ind]
 
 
-class CircleSurface(Interp_Surface):
+class CircleSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -267,8 +330,51 @@ class CircleSurface(Interp_Surface):
         else:
             return val_pointofXplane(L.value, plane1_val, origin.value)
 
+    def get_analytic_normal(self, C1, C2, alpha, P):
+        dotC = val_differentiateLinearCircle(alpha, C2.value, C1.value)
+        dotC = layout.MultiVector(value=dotC)
+        C = my_interp_objects_root(C1, C2, alpha)
+        omegaC = C * dotC
+        dotP = P | omegaC
+        LT = (dotP ^ P ^ einf)
+        LC = ((C | P) ^ einf)
+        normal = (LT * LC * I5)(3).normal()
+        return normal
 
-class PointPairSurface(Interp_Surface):
+    def get_numerical_normal(self, C1, C2, alpha, P):
+        Aplus = my_interp_objects_root(C1, C2, alpha + 0.001)
+        Aminus = my_interp_objects_root(C1, C2, alpha - 0.001)
+        A = my_interp_objects_root(C1, C2, alpha)
+        Pplus = project_points_to_circle([P], Aplus)[0]
+        Pminus = project_points_to_circle([P], Aminus)[0]
+        CA = (Pminus ^ P ^ Pplus)
+        Tangent_CA = ((CA | P) ^ einf)
+        Tangent_A = ((A | P) ^ einf)
+        return -((Tangent_A * Tangent_CA * I5)(3)).normal()
+
+    def reflect_line(self, L, pX, alpha):
+        normal1 = normalised(self.get_analytic_normal(self.first, self.second, alpha, pX))
+        # normal2 = normalised( self.get_numerical_normal(self.first, self.second, alpha, pX) )
+        normal = normal1
+        # print('\n')
+        # print(normal1)
+        # print(normal2)
+        # print('\n')
+
+        # gs = GanjaScene()
+        # local_surface = [interp_objects_root(self.first, self.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
+        # gs.add_objects(local_surface)
+        # gs.add_objects([self.first, self.second])
+        # gs.add_objects([pX],color=Color.CYAN)
+        # gs.add_objects([ray],color=Color.BLUE)
+        # gs.add_objects([normal1],color=Color.RED)
+        # gs.add_objects([normal2],color=Color.GREEN)
+        # draw(gs, scale=0.05)
+        # exit()
+        return normalised(-normal * L * normal)
+
+
+class PointPairSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -312,6 +418,7 @@ class PointPairSurface(Interp_Surface):
 
         # Get the point
         point_val = midpoint_between_lines(L, ppl).value
+
         return point_val
 
 
@@ -407,6 +514,17 @@ def unsign_sphere(S):
 def val_unsign_sphere(S_val):
     return val_normalised(S_val / imt_func(dual_func(S_val), einf.value)[0])
 
+
+
+
+
+
+
+
+
+
+
+
 @numba.njit
 def val_pointofXSphere(ray_val, sphere_val, origin_val):
     B = meet_val(ray_val, sphere_val)
@@ -420,12 +538,7 @@ def val_pointofXSphere(ray_val, sphere_val, origin_val):
 
 
 def pointofXsphere(ray, sphere, origin):
-    B = meet(ray, sphere)
-    if (B**2)[0] > 0.000001:
-        points = PointsFromPP(B)
-        if(points[0] | origin)[0] > (points[1] | origin)[0]:
-            return points[0]
-    return None
+    return val_pointofXSphere(ray.value, sphere.value, origin.value)
 
 
 @numba.njit
@@ -442,10 +555,25 @@ def val_pointofXplane(ray_val, plane_val, origin_val):
 
 
 def pointofXplane(ray, plane, origin):
-    p = val_pointofXplane(ray.value, plane.value, origin.value)
-    if p[0] == -1.:
-        return None
-    return layout.MultiVector(value=p)
+    return val_pointofXplane(ray.value, plane.value, origin.value)
+
+
+def val_pointofXcircle(ray_val, circle_val, origin_val):
+    m = meet_val(ray_val, circle_val)
+    if (np.abs(m) <= 0.000001).all():
+        return np.array([-1.])
+    elif gmt_func(m, m)[0] <= 0.00001:
+        return val_pointofXplane(ray_val, omt_func(circle_val, einf.value), origin_val)
+    else:
+        return np.array([-1.])
+
+
+def pointofXcircle(ray, circle, origin):
+    return val_pointofXcircle(ray.value, circle.value, origin.value)
+
+
+def pointofXsurface(L, surf, origin):
+    return surf.intersection_point(L, origin)
 
 
 def cosangle_between_lines(l1, l2):
@@ -460,44 +588,18 @@ def getfatt(d, a1, a2, a3):
     return min(1./(a1 + a2*d + a3*d*d), 1.)
 
 
-def PointsFromPP(mv):
-    return point_pair_to_end_points(mv)
-
-
 def reflect_in_sphere(ray, sphere, pX):
     return normalised((pX|(sphere*ray*sphere))^einf)
 
-
-def pointofXcircle(ray_val, circle_val, origin_val):
-    m = meet_val(ray_val, circle_val)
-    if (np.abs(m) <= 0.000001).all():
-        return np.array([-1.])
-    elif gmt_func(m, m)[0] <= 0.00001:
-        return val_pointofXplane(ray_val, omt_func(circle_val, einf.value), origin_val)
-    else:
-        return np.array([-1.])
 
 @numba.njit
 def val_interp_objects_root(C1_val, C2_val, alpha):
     C_temp = (1-alpha) * C1_val + alpha * C2_val
     return val_normalised(neg_twiddle_root_val(C_temp)[0])
 
+
 def my_interp_objects_root(C1, C2, alpha):
-    return layout.MultiVector(value = val_interp_objects_root(C1.value, C2.value, alpha))
-
-
-def pointofXsurface(L, surf, origin):
-    return surf.intersection_point(L, origin)
-
-
-def project_points_to_circle(point_list, circle):
-    """
-    Takes a load of point and projects them onto a circle
-    """
-    circle_plane = (circle^einf).normal()
-    planar_points = project_points_to_plane(point_list,circle_plane)
-    circle_points = project_points_to_sphere(planar_points, -circle*circle_plane*I5)
-    return circle_points
+    return layout.MultiVector(value=val_interp_objects_root(C1.value, C2.value, alpha))
 
 
 @numba.njit
@@ -540,56 +642,6 @@ def val_differentiateLinearCircle(alpha, C1_val, C2_val):
     return Calphadot
 
 
-def get_analytic_normal(C1,C2,alpha,P):
-    dotC = val_differentiateLinearCircle(alpha, C2.value, C1.value)
-    dotC = layout.MultiVector(value=dotC)
-    C = my_interp_objects_root(C1, C2, alpha)
-    omegaC = C*dotC
-    dotP = P|omegaC
-    LT = (dotP ^ P ^ einf)
-    LC = ((C|P)^einf)
-    normal = (LT*LC*I5)(3).normal()
-    return normal
-
-
-def get_numerical_normal(C1, C2, alpha, P):
-    Aplus = my_interp_objects_root(C1,C2,alpha+0.001)
-    Aminus = my_interp_objects_root(C1,C2,alpha-0.001)
-    A = my_interp_objects_root(C1,C2,alpha)
-    Pplus = project_points_to_circle([P], Aplus)[0]
-    Pminus = project_points_to_circle([P], Aminus)[0]
-    CA = (Pminus ^ P ^ Pplus)
-    Tangent_CA = ((CA | P) ^ einf)
-    Tangent_A = ((A | P) ^ einf)
-    return -((Tangent_A*Tangent_CA*I5)(3)).normal()
-
-from pyganja import *
-
-def reflect_in_surface(ray, object, pX, alpha):
-    sc = GAScene()
-    sc.add_euc_point(pX, blue)
-    file.write(str(sc) + "\n")
-    normal1 = normalised( get_analytic_normal(object.first, object.second, alpha, pX) )
-    #normal2 = normalised( get_numerical_normal(object.first, object.second, alpha, pX) )
-    normal = normal1
-    # print('\n')
-    # print(normal1)
-    # print(normal2)
-    # print('\n')
-
-    # gs = GanjaScene()
-    # local_surface = [interp_objects_root(object.first, object.second, alp) for alp in np.linspace(alpha-0.01,alpha+0.01,100)]
-    # gs.add_objects(local_surface)
-    # gs.add_objects([object.first, object.second])
-    # gs.add_objects([pX],color=Color.CYAN)
-    # gs.add_objects([ray],color=Color.BLUE)
-    # gs.add_objects([normal1],color=Color.RED)
-    # gs.add_objects([normal2],color=Color.GREEN)
-    # draw(gs, scale=0.05)
-    # exit()
-    return normalised(-normal*ray*normal)
-
-
 def intersects(ray, scene, origin):
     dist = -np.finfo(float).max
     index = None
@@ -597,16 +649,9 @@ def intersects(ray, scene, origin):
     alpha = None
     alphaFin = None
     for idx, obj in enumerate(scene):
-        if obj.type == "Sphere":
-            pX = val_pointofXSphere(ray.value, obj.object.value, origin.value)
-        if obj.type == "Plane":
-            pX = val_pointofXplane(ray.value, obj.object.value, origin.value)
-        if obj.type == "Circle":
-            pX = pointofXcircle(ray.value, obj.object.value, origin.value)
-        if obj.type == "Surface":
-            pX, alpha = pointofXsurface(ray, obj, origin)
-
-        if pX[0] == -1.: continue
+        pX, alpha = obj.intersection_point(ray, origin)
+        if pX[0] == -1.:
+            continue
         if idx == 0:
             dist, index, pXfin, alphaFin = imt_func(pX, origin.value)[0] , idx , layout.MultiVector(value=pX), alpha
             continue
@@ -615,21 +660,30 @@ def intersects(ray, scene, origin):
             dist, index, pXfin, alphaFin = t, idx, layout.MultiVector(value=pX), alpha
     return pXfin, index, alphaFin
 
-file = open("intersection_points.txt", "a+")
+
 def trace_ray(ray, scene, origin, depth):
+
+    # Initialise the pixel color
     pixel_col = np.zeros(3)
+
+    # Check for intersections with the scene
     pX, index, alpha = intersects(ray, scene, origin)
+
+    # If there is no intersection return the background color
     if index is None:
         return background
+    # Otherwise get the object we have hit
     obj = scene[index]
-    sc = GAScene()
-    if obj.type == "Sphere":
-        sc.add_euc_point(pX)
-    else:
-        sc.add_euc_point(pX, green)
-    file.write(str(sc) + "\n")
+
+    # Reflect the line in the object
+    reflected = obj.reflect_line(ray, pX, alpha)
+    # Get the normal
+    norm = normalised(reflected - ray)
+
+    # Iterate over the lights
     for light in lights:
-        Satt = 1.
+
+        # Calculate the lighting model
         upl_val = val_up(light.position.value)
         toL = layout.MultiVector(value=val_normalised(omt_func(omt_func(pX.value, upl_val), einf.value)))
         d = layout.MultiVector(value=imt_func(pX.value, upl_val))[0]
@@ -637,27 +691,10 @@ def trace_ray(ray, scene, origin, depth):
         if options['ambient']:
             pixel_col += ambient * obj.ambient * obj.colour
 
-        if intersects(toL, scene[:index] + scene[index+1:], pX)[0] is not None:
+        # Check for shadows
+        Satt = 1.
+        if intersects(toL, scene[:index] + scene[index + 1:], pX)[0] is not None:
             Satt *= 0.8
-
-        if obj.type == "Sphere":
-            reflected = -1.*reflect_in_sphere(ray, obj.object, pX)
-        elif obj.type == "Plane":
-            reflected = layout.MultiVector(value=(gmt_func(gmt_func(obj.object.value, ray.value), obj.object.value)))
-        elif obj.type == "Circle":
-            reflected = layout.MultiVector(value=(gmt_func(gmt_func(val_normalised(
-                omt_func(obj.object.value, einf.value)), ray.value), val_normalised(omt_func(obj.object.value,einf.value)))))
-        else:
-            reflected = reflect_in_surface(ray, obj, pX, alpha)
-
-
-        norm = normalised(reflected - ray)
-
-        # tmp_scene = GAScene()
-        # tmp_scene.add_line(ray, red)
-        # tmp_scene.add_line(norm, green)
-        # tmp_scene.add_line(reflected, green)
-        # print(tmp_scene)
 
         fatt = getfattconf(d, a1, a2, a3)
 
@@ -829,9 +866,9 @@ if __name__ == "__main__":
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
     # Used to generate sphere
-    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4 * e2))
+    C1 = normalised(up(-4 * e3) ^ up(4 * e3) ^ up(4*e2))
 
-    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3) ^ up(5 * e1 + 4 * e2))
+    C2 = normalised(up(5 * e1 - 4 * e3) ^ up(5 * e1 + 4 * e3)^up(5*e1 + 4*e2))
 
     scene = []
     scene.append(
@@ -840,7 +877,7 @@ if __name__ == "__main__":
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
     im1.save('figtestLatestSphereNumerical.png')
-    drawScene()
+    #drawScene()
 
     equator_circle = (C1 + C2).normal()
 
@@ -850,7 +887,7 @@ if __name__ == "__main__":
     scene[0].object = unsign_sphere(interp_sphere)
 
     print("\n\nNow drawing Sphere:\n\n")
-    drawScene()
+    #drawScene()
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
     im1.save('figtestSphere.png')
