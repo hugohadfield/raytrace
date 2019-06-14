@@ -92,6 +92,10 @@ class Circle:
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0]*255), int(self.colour[1]*255), int(self.colour[2]*255))
 
+
+
+
+
 class Interp_Surface:
     def __init__(self, C1, C2, colour, specular, spec_k, amb, diffuse, reflection):
         self.first = C1
@@ -104,7 +108,6 @@ class Interp_Surface:
         self.reflection = reflection
         self.type = "Surface"
         self._probes = None
-        self._probe_mats = None
         self._probe_func = None
         self._intersection_func = None
         self._bounding_sphere = None
@@ -115,9 +118,30 @@ class Interp_Surface:
 
     @property
     def bounding_sphere(self):
-        if self._bounding_sphere is None:
-            self._bounding_sphere = enclosing_sphere([circle_to_sphere(C) for C in self.probes])
-        return self._bounding_sphere
+        """
+        Gets an approximate bounding sphere around the surface to accelerate rendering
+
+        This is specific per type of evolution object and hence needs overwriting
+        """
+        raise NotImplementedError('bounding_sphere has not been defined in the child class')
+
+    @property
+    def probe_func(self):
+        """
+        Gets the evolution paramater at points of intersection
+
+        This is specific per type of evolution object and hence needs overwriting
+        """
+        raise NotImplementedError('probe_func has not been defined in the child class')
+
+    def intersect_at_alpha(self, L, origin, alpha):
+        """
+        Given an intersection, return the point that is the intersection between
+        the ray L and the surface at evolution parameter alpha
+
+        This is specific per type of evolution object and hence needs overwriting
+        """
+        raise NotImplementedError('probe_func has not been defined in the child class')
 
     @property
     def bound_func(self):
@@ -138,29 +162,6 @@ class Interp_Surface:
         return self._probes
 
     @property
-    def probe_mats(self):
-        if self._probe_mats is None:
-            dual_probes = [p*I5 for p in self.probes]
-            self._probe_mats = np.array([mask4@get_left_gmt_matrix(dp.value) for dp in dual_probes])
-        return self._probe_mats
-
-    @property
-    def probe_func(self):
-        if self._probe_func is None:
-            ntcmats = len( self.probes )
-            pms = np.array([dual_func(p.value) for p in self.probes])
-            @numba.njit
-            def tcf(L):
-                output = np.zeros(ntcmats)
-                Lval = dual_func(L)
-                for i in range(ntcmats):
-                    val = omt_func(pms[i,:],Lval)
-                    output[i] = imt_func(val,val)[0]
-                return output
-            self._probe_func = tcf
-        return self._probe_func
-
-    @property
     def intersection_func(self):
         if self._intersection_func is None:
             pfunc = self.probe_func
@@ -169,7 +170,7 @@ class Interp_Surface:
             @numba.njit
             def intersect_line(Lval):
                 """
-                Evaluate the probes and get the (up to 4) crossing points
+                Evaluate the probes and get (up to 4) crossing points
                 """
                 alphas = -np.ones(4)
                 if bfunc(Lval):
@@ -190,6 +191,128 @@ class Interp_Surface:
                 return alphas
             self._intersection_func = intersect_line
         return self._intersection_func
+
+    def intersection_point(self, L, origin):
+        """
+        Given there is an intersection this returns the point of intersection and the
+        evolution parameter at that point
+        """
+
+        # Find the intersection and select the ones within valid range
+        alpha_vals = self.intersection_func(L.value)
+        alpha_in_vals = [a for a in alpha_vals if a < 1 and a > 0]
+
+        # Check if it misses entirely
+        if len(alpha_in_vals) < 1:
+            return np.array([-1.]), None
+
+        # Calc the intersection points
+        intersection_points = np.zeros((len(alpha_in_vals), 32))
+        for i, alp in enumerate(alpha_in_vals):
+            intersection_points[i, :] = self.intersect_at_alpha(L, origin, alp)
+
+        # Calc the closest intersection point to the origin
+        closest_ind = int(np.argmax([imt_func(p, origin.value)[0] for p in intersection_points]))
+        return intersection_points[closest_ind, :], alpha_in_vals[closest_ind]
+
+
+class CircleSurface(Interp_Surface):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @property
+    def probe_func(self):
+        """
+        This generates a function that takes the meet squared and takes the scalar value of it
+        """
+        if self._probe_func is None:
+            ntcmats = len(self.probes)
+            pms = np.array([dual_func(p.value) for p in self.probes])
+            @numba.njit
+            def tcf(L):
+                output = np.zeros(ntcmats)
+                Lval = dual_func(L)
+                for i in range(ntcmats):
+                    val = omt_func(pms[i,:],Lval)
+                    output[i] = imt_func(val,val)[0]
+                return output
+            self._probe_func = tcf
+        return self._probe_func
+
+    @property
+    def bounding_sphere(self):
+        """
+        Finds an approximate bounding sphere for a set of circles
+        """
+        if self._bounding_sphere is None:
+            self._bounding_sphere = enclosing_sphere([circle_to_sphere(C) for C in self.probes])
+        return self._bounding_sphere
+
+    def intersect_at_alpha(self, L, origin, alpha):
+        """
+        Given an intersection, return the point that is the intersection between
+        the ray L and the surface at evolution parameter alpha
+
+        This is specific per type of surface and hence needs overwriting
+        """
+        # For each alpha val make the plane associated with it
+        interp_circle = my_interp_objects_root(self.first, self.second, alpha)
+        plane1_val = val_normalised(omt_func(interp_circle.value, einf.value))
+
+        # Check if the line lies in this plane
+        if np.sum(np.abs(meet(interp_circle, L).value)) < 1E-3:
+            # Intersect as it it were a sphere
+            S = circle_to_sphere(interp_circle)
+            return val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value)
+        else:
+            return val_pointofXplane(L.value, plane1_val, origin.value)
+
+
+class PointPairSurface(Interp_Surface):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @property
+    def probe_func(self):
+        """
+        This generates a function that takes the meet and takes the scalar value of it
+        """
+        if self._probe_func is None:
+            ntcmats = len(self.probes)
+            pms = np.array([dual_func(p.value) for p in self.probes])
+            @numba.njit
+            def tcf(L):
+                output = np.zeros(ntcmats)
+                Lval = dual_func(L)
+                for i in range(ntcmats):
+                    output[i] = omt_func(pms[i,:],Lval)[31]
+                return output
+            self._probe_func = tcf
+        return self._probe_func
+
+    @property
+    def bounding_sphere(self):
+        """
+        Finds an approximate bounding sphere for a set of circles
+        """
+        if self._bounding_sphere is None:
+            self._bounding_sphere = normalised(self.first ^ self.second)
+        return self._bounding_sphere
+
+    def intersect_at_alpha(self, L, origin, alpha):
+        """
+        Given an intersection, return the point that is the intersection between
+        the ray L and the surface at evolution parameter alpha
+
+        This is specific per type of surface and hence needs overwriting
+        """
+        # For each alpha val make the plane associated with it
+        interp_pp = my_interp_objects_root(self.first, self.second, alpha)
+        ppl = normalised(interp_pp^einf)
+
+        # Get the point
+        point_val = midpoint_between_lines(L, ppl).value
+        return point_val
 
 
 class Light:
@@ -364,35 +487,7 @@ def my_interp_objects_root(C1, C2, alpha):
 
 
 def pointofXsurface(L, surf, origin):
-    C1 = surf.first
-    C2 = surf.second
-
-    alpha_vals = surf.intersection_func(L.value)
-    alpha_in_vals = [a for a in alpha_vals if a < 1 and a > 0]
-
-    # Check if it misses entirely
-    if len(alpha_in_vals) < 1:
-        return np.array([-1.]), None
-
-    # Calc the intersection points
-    intersection_points = np.zeros((len(alpha_in_vals),32))
-    for i,alp in enumerate(alpha_in_vals):
-
-        # For each alpha val make the plane associated with it
-        interp_circle = my_interp_objects_root(C1, C2, alp)
-        plane1_val = val_normalised(omt_func(interp_circle.value, einf.value))
-
-        # Check if the line lies in this plane
-        if np.sum(np.abs(meet(interp_circle, L).value)) < 1E-3:
-            # Intersect as it it were a sphere
-            S = circle_to_sphere(interp_circle)
-            intersection_points[i, :] = val_pointofXSphere(L.value, unsign_sphere(S).value, origin.value)
-        else:
-            intersection_points[i, :] = val_pointofXplane(L.value, plane1_val, origin.value)
-
-    # Calc the closest intersection point to the origin
-    closest_ind = int(np.argmax([imt_func(p, origin.value)[0] for p in intersection_points]))
-    return intersection_points[closest_ind, :], alpha_in_vals[closest_ind]
+    return surf.intersection_point(L, origin)
 
 
 def project_points_to_circle(point_list, circle):
@@ -663,7 +758,7 @@ if __name__ == "__main__":
     #             0.33188 ^ e145) + (2.14836 ^ e234) + (2.05378 ^ e235) - (1.04675 ^ e245) + (0.48378 ^ e345)
 
     scene.append(
-        Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
     scene.append(
         Circle(e1, -e1, e3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
@@ -740,7 +835,7 @@ if __name__ == "__main__":
 
     scene = []
     scene.append(
-        Interp_Surface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
