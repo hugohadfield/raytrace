@@ -271,12 +271,23 @@ class InterpSurface:
 
         # Calc the intersection points
         intersection_points = np.zeros((len(alpha_in_vals), 32))
+        nskip = 0
         for i, alp in enumerate(alpha_in_vals):
-            intersection_points[i, :] = self.intersect_at_alpha(L, origin, alp)
+            ptest = self.intersect_at_alpha(L, origin, alp)
+            if self.test_point(ptest):
+                intersection_points[i-nskip, :] = ptest
+            else:
+                nskip += 1
+        intersection_points = intersection_points[0:len(alpha_in_vals)-nskip,:]
+        if len(alpha_in_vals)-nskip == 0:
+            return np.array([-1.]), None
 
         # Calc the closest intersection point to the origin
         closest_ind = int(np.argmax([imt_func(p, origin.value)[0] for p in intersection_points]))
         return intersection_points[closest_ind, :], alpha_in_vals[closest_ind]
+
+    def test_point(self, ptest):
+        return True
 
 
 class CircleSurface(InterpSurface):
@@ -412,7 +423,7 @@ class PointPairSurface(InterpSurface):
 
         # Get the point
         point_val = midpoint_between_lines(L, ppl).value
-
+       
         return point_val
 
     def get_numerical_normal(self, alpha, P):
@@ -436,6 +447,20 @@ class PointPairSurface(InterpSurface):
         """
         normal = normalised(self.get_numerical_normal(alpha, pX))
         return normalised((-normal * L * normal)(3))
+
+    def test_point(self, ptest):
+        if imt_func(ptest, dual_func(self.bounding_sphere.value))[0] > 0:
+            return True
+        else:
+            return False
+
+
+    # def intersection_point(self, L, origin):
+    #     pX, alpha = super().intersection_point(L, origin)
+    #     if imt_func(pX, self.bounding_sphere.value)[0] < 0:
+    #         #print(imt_func(pX, self.bounding_sphere.value)[0], 'FAIL')
+    #         pX[0] = -1.0
+    #     return pX, alpha
 
 
 class Light:
@@ -666,7 +691,7 @@ def intersects(ray, scene, origin):
     alphaFin = None
     for idx, obj in enumerate(scene):
         pX, alpha = obj.intersection_point(ray, origin)
-        if pX[0] == -1.:
+        if pX[0] < -0.5:
             continue
         if idx == 0:
             dist, index, pXfin, alphaFin = imt_func(pX, origin.value)[0] , idx , layout.MultiVector(value=pX), alpha
@@ -796,8 +821,8 @@ if __name__ == "__main__":
     a1 = 0.02
     a2 = 0.0
     a3 = 0.002
-    w = 150
-    h = 100
+    w = 600
+    h = 480
     options = {'ambient': True, 'specular': True, 'diffuse': True}
     ambient = 0.3
     k = 1.  # Magic constant to scale everything by the same amount!
