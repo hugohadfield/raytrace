@@ -441,11 +441,27 @@ class PointPairSurface(InterpSurface):
         Tangent_A = normalised(A^einf)
         return -normalised((Tangent_A * Tangent_CA * I5)(3))
 
+    def get_analytic_normal(self, alpha, P):
+        """
+        Get the normal at of the surface at the point P that corresponds to alpha
+        Via a closed form expression
+        """
+        dotC = val_differentiateLinearPointPair(alpha, self.second.value, self.first.value)
+        dotC = layout.MultiVector(value=dotC)
+        C = my_interp_objects_root(self.first, self.second, alpha)
+        omegaC = C * dotC
+        dotP = P | omegaC
+        LT = (dotP ^ P ^ einf)
+        LC = (C^einf).normal()
+        normal = (LT * LC * I5)(3).normal()
+        return normal
+
+
     def reflect_line(self, L, pX, alpha):
         """
         Reflects a line in the surface
         """
-        normal = normalised(self.get_numerical_normal(alpha, pX))
+        normal = normalised(self.get_analytic_normal(alpha, pX))
         return normalised((-normal * L * normal)(3))
 
     def test_point(self, ptest):
@@ -682,6 +698,45 @@ def val_differentiateLinearCircle(alpha, C1_val, C2_val):
 
     return Calphadot
 
+
+@numba.njit
+def val_differentiateLinearPointPair(alpha, C1_val, C2_val):
+    X_val = alpha*C1_val + (1-alpha) * C2_val
+
+    phiSquared = -gmt_func(X_val, adjoint_func(X_val))
+    phiSq0 = phiSquared[0]
+    phiSq4 = project_val(phiSquared,4)
+
+    dotz = C1_val - C2_val
+    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val))[0]
+    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val), 4)
+
+    tempsqrt = np.sqrt(phiSq0**2 -  gmt_func(phiSq4, phiSq4)[0])
+    dott = (dotphiSq0 + ((phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
+
+    t = phiSq0 + tempsqrt
+    sqrt2t = np.sqrt(2*t)
+
+    f = t/(sqrt2t)
+    dotf = (3*dott)/(2*sqrt2t)
+
+    g = phiSq4/(sqrt2t)
+    dotg = (4*t*dotphiSq4 - dott *phiSq4)/(2*t*sqrt2t)
+
+    k = (f*f - gmt_func(g,g)[0])
+
+    dotk = (2*f*dotf - gmt_func(g,dotg) - gmt_func(dotg, g))[0]
+
+    fminusg = -g
+    fminusg[0] += f
+    dotfminusdotg = -dotg
+    dotfminusdotg[0] += dotf
+    term1 = k*gmt_func(dotz, fminusg)
+    term2 = k*gmt_func(dotfminusdotg, X_val)
+    term3 = -dotk*gmt_func(fminusg, X_val)
+    Calphadot = val_normalised(project_val(term1 + term2 + term3, 2))
+
+    return Calphadot
 
 def intersects(ray, scene, origin):
     dist = -np.finfo(float).max
