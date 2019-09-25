@@ -595,7 +595,7 @@ def drawScene():
             col = objects.getColour()
             sc.add_point_pair(objects.first, col)
             sc.add_point_pair(objects.second, col)
-            for circles in [interp_objects_root(objects.first, objects.second, alpha/100) for alpha in range(1,100,20)]:
+            for circles in [interp_objects_root(objects.first, objects.second, alpha/100) for alpha in range(1,100,5)]:
                 sc.add_point_pair(circles, col)
 
     for light in lights:
@@ -1031,42 +1031,41 @@ if __name__ == "__main__":
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
 
-    # C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
-    # C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
+    C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
+    C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
 
+    scene = []
+    scene.append(
+        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
+    print('\n\n\n\nRENDERING THIS \n\n\n\n')
+    drawScene()
+    exit()
+    print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
+
+    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
+    im1.save('standardPointPairScene.png')
+
+    print("\n\n")
+    print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
+    # p1 = 5*e2 + -10 *e1 - 4 * e3
+    # p2 = 5*e2 + -10 *e1 + 4 * e2
+    # p3 = 4*e2 + 10 * e1 - 3 * e3
     # scene = []
     # scene.append(
-    #     PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    #     TriangularFacet(p1,p2,p3 , np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     # )
-    # draw(scene[0].as_scene(), scale=0.1, browser_window=True)
-    # exit()
 
     # print('\n\n\n\nRENDERING THIS \n\n\n\n')
     # drawScene()
     # print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
     # im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    # im1.save('standardPointPairScene.png')
+    # im1.save('triangleScene.png')
 
     # print("\n\n")
     # print("--- %s seconds ---" % (time.time() - start_time))
-
-
-
-    p1 = 5*e2 + -10 *e1 - 4 * e3
-    p2 = 5*e2 + -10 *e1 + 4 * e2
-    p3 = 4*e2 + 10 * e1 - 3 * e3
-    scene = []
-    scene.append(
-        TriangularFacet(p1,p2,p3 , np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    )
-
-    print('\n\n\n\nRENDERING THIS \n\n\n\n')
-    drawScene()
-    print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
-
-    im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('triangleScene.png')
-
-    print("\n\n")
-    print("--- %s seconds ---" % (time.time() - start_time))
