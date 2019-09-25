@@ -71,7 +71,7 @@ def get_root(x, y):
 class Sphere:
     def __init__(self, c, r, colour, specular, spec_k, amb, diffuse, reflection):
         self.object = new_sphere(c + r*e1, c + r*e2, c + r*e3, c - r*e1)
-        self.colour = colour
+        self.colour = np.array(colour)
         self.specular = specular
         self.spec_k = spec_k
         self.ambient = amb
@@ -94,6 +94,10 @@ class Sphere:
         """
         return -1.*reflect_in_sphere(L, self.object, pX)
 
+    def as_scene(self):
+        gs = GanjaScene()
+        gs.add_object(self.object, color=rgb2hex((self.colour*255).astype(int)))
+        return gs
 
 class Plane:
     def __init__(self, p1, p2, p3, colour, specular, spec_k, amb, diffuse, reflection):
@@ -121,6 +125,41 @@ class Plane:
         """
         return layout.MultiVector(value=(gmt_func(gmt_func(self.object.value, L.value), self.object.value)))
 
+    def as_scene(self):
+        gs = GanjaScene()
+        gs.add_object(self.object, color=rgb2hex((self.colour*255).astype(int)))
+        return gs
+
+class TriangularFacet(Plane):
+    def __init__(self, p1, p2, p3, *args, **kwargs):
+        self.A = up(p1)
+        self.B = up(p2)
+        self.C = up(p3)
+        self.p1 = (self.A^self.C).normal()
+        self.p2 = (self.A^self.B).normal()
+        self.p3 = (self.C^self.B).normal()
+        super().__init__(p1, p2, p3, *args, **kwargs)
+        self.type = "Triangle"
+
+    def does_line_hit(self, L):
+        p1l = (self.p1^L)[31]
+        p2l = (self.p2^L)[31]
+        p3l = (self.p3^L)[31]
+        alpha = p2l/(p2l-p1l)
+        beta = p3l/(p3l-p2l)
+        #
+        return alpha <= 1 and alpha >=0 and beta <= 1 and beta >=0
+
+    def intersection_point(self, L, origin):
+        if self.does_line_hit(L):
+            return pointofXplane(L, self.object, origin), None
+        else:
+            return np.array([-1.]), None
+
+    def as_scene(self):
+        gs = GanjaScene()
+        gs.add_facet([self.A, self.B, self.C], color=rgb2hex((self.colour*255).astype(int)))
+        return gs
 
 class Circle:
     def __init__(self, p1, p2, p3, colour, specular, spec_k, amb, diffuse, reflection):
@@ -150,6 +189,10 @@ class Circle:
             omt_func(self.object.value, einf.value)), L.value),
             val_normalised(omt_func(self.object.value, einf.value)))))
 
+    def as_scene(self):
+        gs = GanjaScene()
+        gs.add_object(self.object, color=rgb2hex((self.colour*255).astype(int)))
+        return gs
 
 class InterpSurface:
     def __init__(self, C1, C2, colour, specular, spec_k, amb, diffuse, reflection):
@@ -254,6 +297,14 @@ class InterpSurface:
                 return alphas
             self._intersection_func = intersect_line
         return self._intersection_func
+
+    def as_scene(self):
+        gs = GanjaScene()
+        nprobes = len(self.probes)
+        for i in range(20):
+            p = self.probes[int(i*nprobes/20)]
+            gs.add_object(p, color=rgb2hex((self.colour*255).astype(int)))
+        return gs
 
     def intersection_point(self, L, origin):
         """
@@ -390,13 +441,13 @@ class PointPairSurface(InterpSurface):
         """
         if self._probe_func is None:
             ntcmats = len(self.probes)
-            pms = np.array([dual_func(p.value) for p in self.probes])
+            pms = np.array([p.value for p in self.probes])
             @numba.njit
             def tcf(L):
                 output = np.zeros(ntcmats)
-                Lval = dual_func(L)
+                #Lval = dual_func(L)
                 for i in range(ntcmats):
-                    output[i] = omt_func(pms[i,:],Lval)[31]
+                    output[i] = omt_func(pms[i,:],L)[31]
                 return output
             self._probe_func = tcf
         return self._probe_func
@@ -483,7 +534,11 @@ class Light:
     def __init__(self, position, colour):
         self.position = position
         self.colour = colour
-
+    def as_scene(self):
+        gs = GanjaScene()
+        gs.add_object((up(self.position) - 0.5*einf)*I5, color=Color.YELLOW)
+        print((up(self.position) - 0.5*einf)*I5)
+        return gs
 
 def drawScene():
     Ptr = Ptl + 2*e1*xmax
@@ -495,13 +550,16 @@ def drawScene():
 
     #Draw Camera transformation
     # sc.add_line(original, red)
-    sc.add_line((MVR*original*~MVR).normal(), red)
-    sc.add_euc_point(up(cam), blue)
+    cam_c_line = (MVR*original*~MVR).normal()
+    cam_pos = up(cam)
+    sc.add_line(cam_c_line, red)
+    sc.add_euc_point(cam_pos, blue)
     sc.add_euc_point(up(lookat), blue)
 
     #Draw screen corners
-    for points in rect:
-        sc.add_euc_point(RMVR(up(points)), cyan)
+    scorners = [RMVR(up(pnt)) for pnt in rect]
+    for scorn in scorners:
+        sc.add_euc_point(scorn, cyan)
 
     #Draw screen rectangle
 
@@ -527,6 +585,10 @@ def drawScene():
             sc.add_sphere(objects.object, objects.getColour())
         elif objects.type == "Plane":
             sc.add_plane(objects.object, objects.getColour())
+        elif objects.type == "Triangle":
+            sc.add_point_pair(objects.p1, objects.getColour())
+            sc.add_point_pair(objects.p2, objects.getColour())
+            sc.add_point_pair(objects.p3, objects.getColour())
         elif objects.type == "Circle":
             sc.add_circle(objects.object, objects.getColour())
         else:
@@ -542,6 +604,17 @@ def drawScene():
         sc.add_sphere(new_sphere(l + e1, l+e2, l+e3, l-e1), yellow)
 
     print(sc)
+
+    gs = GanjaScene()
+    for s in scene:
+        gs += s.as_scene()
+    for l in lights:
+        gs += l.as_scene()
+    gs.add_object(cam_pos, color=Color.BLACK)
+    gs.add_object(cam_c_line, color=Color.CYAN)
+    gs.add_objects([RMVR(l) for l in lines], color=Color.BLUE)
+    gs.add_objects(scorners, color=Color.BLACK)
+    draw(gs, scale=0.1, browser_window=True)
 
 
 def new_sphere(p1, p2, p3, p4):
@@ -819,12 +892,13 @@ def render():
         if i % 1 == 0:
             if i != 0:
                 t_current = time.time() - start_time
-                current_percent = (i/w * 100)
-                percent_per_second = current_percent/t_current
-                t_est_total = 100/percent_per_second
-                print(i/w * 100, "% complete", 
-                    t_current/60 , 'mins elapsed',
-                    (t_est_total - t_current)/60, ' mins remaining')
+                if t_current is not 0:
+                    current_percent = (i/w * 100)
+                    percent_per_second = current_percent/t_current
+                    t_est_total = 100/percent_per_second
+                    print(i/w * 100, "% complete", 
+                        t_current/60 , 'mins elapsed',
+                        (t_est_total - t_current)/60, ' mins remaining')
         point = initial
         line = normalised(upcam ^ initial ^ einf)
         for j in range(0, h):
@@ -916,18 +990,18 @@ if __name__ == "__main__":
 
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
-    print('\n\n\n\nRENDERING THIS \n\n\n\n')
-    drawScene()
-    print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
+    # print('\n\n\n\nRENDERING THIS \n\n\n\n')
+    # drawScene()
+    # print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
-    imrendered = render()
-    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
-    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
-    im1 = Image.fromarray(imrendered.astype('uint8'), 'RGB')
-    im1.save('randomSurface.png')
+    # imrendered = render()
+    # print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    # print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+    # im1 = Image.fromarray(imrendered.astype('uint8'), 'RGB')
+    # im1.save('randomSurface.png')
 
-    print("\n\n")
-    print("--- %s seconds ---" % (time.time() - start_time))
+    # print("\n\n")
+    # print("--- %s seconds ---" % (time.time() - start_time))
 
 
 
@@ -957,20 +1031,42 @@ if __name__ == "__main__":
     Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
 
 
-    C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
-    C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
+    # C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
+    # C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
 
+    # scene = []
+    # scene.append(
+    #     PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    # )
+    # draw(scene[0].as_scene(), scale=0.1, browser_window=True)
+    # exit()
+
+    # print('\n\n\n\nRENDERING THIS \n\n\n\n')
+    # drawScene()
+    # print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
+
+    # im1 = Image.fromarray(render().astype('uint8'), 'RGB')
+    # im1.save('standardPointPairScene.png')
+
+    # print("\n\n")
+    # print("--- %s seconds ---" % (time.time() - start_time))
+
+
+
+    p1 = 5*e2 + -10 *e1 - 4 * e3
+    p2 = 5*e2 + -10 *e1 + 4 * e2
+    p3 = 4*e2 + 10 * e1 - 3 * e3
     scene = []
     scene.append(
-        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        TriangularFacet(p1,p2,p3 , np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
     )
+
     print('\n\n\n\nRENDERING THIS \n\n\n\n')
     drawScene()
     print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
     im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    im1.save('standardPointPairScene.png')
+    im1.save('triangleScene.png')
 
     print("\n\n")
     print("--- %s seconds ---" % (time.time() - start_time))
-
