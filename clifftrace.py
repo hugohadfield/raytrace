@@ -268,7 +268,9 @@ class RayScene:
 
 
 
-if __name__ == "__main__":
+
+
+def test_render_random_point_pair_scene():
 
     shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
                        'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
@@ -328,70 +330,118 @@ if __name__ == "__main__":
 
 
 
+def test_render_standard_point_pair_scene():
+
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+    k = 1.0
+
+    lights_list = []
+    L = -20. * e1 + 5. * e3 - 10. * e2
+    colour_light = np.ones(3)
+    lights_list.append(Light(L, colour_light))
+    L = 20. * e1 + 5. * e3 - 10. * e2
+    lights_list.append(Light(L, colour_light))
+
+
+    # Construct the camera
+    camera_lookat = e1
+    image_height = 80
+    image_width = 100
+    f = 1.
+    centre3d = - 10. * e2 + 1. * e1
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
+    C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
+
+    object_list = []
+    object_list.append(
+        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         max_bounces=2,
+                         shading_options=shading_options)
+
+    # Have a look at what we are rendering
+    new_scene.draw()
+
+    # Render it all
+    imrendered = new_scene.render()
+
+
+    # Save and show the image
+    plt.imsave('PointPairStandard.png', imrendered.astype(np.uint8))
+    plt.imshow(imrendered)
+    plt.show()
+
+
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
 
 
-    #
-    # """
-    # Now render a fixed scene
-    # """
-    # start_time = time.time()
-    #
-    # lights = []
-    # L = -20. * e1 + 5. * e3 - 10. * e2
-    # colour_light = np.ones(3)
-    # lights.append(Light(L, colour_light))
-    # L = 20. * e1 + 5. * e3 - 10. * e2
-    # lights.append(Light(L, colour_light))
-    #
-    # cam = - 10. * e2 + 1. * e1
-    # lookat = e1
-    # upcam = up(cam)
-    #
-    # optic_axis = new_line(cam, lookat)
-    # original = new_line(eo, e2)
-    # MVR = generate_translation_rotor(cam - lookat) * rotor_between_lines(original, optic_axis)
-    # dTx = MVR * generate_translation_rotor((2 * xmax / (w - 1)) * e1) * ~MVR
-    # dTy = MVR * generate_translation_rotor(-(2 * ymax / (h - 1)) * e3) * ~MVR
-    #
-    # Ptl = f * 1.0 * e2 - e1 * xmax + e3 * ymax
-    #
-    #
-    # C1 = normalised(up(5*e2 + -10 *e1 - 4 * e3) ^ up(5*e2 + -10 *e1 + 4 * e2))
-    # C2 = normalised(up(4*e2 + 10 * e1 - 3 * e3) ^ up(5*e2 + 10 * e1 + 5 * e3))
-    #
-    # scene = []
-    # scene.append(
-    #     PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    # )
-    #
-    # print('\n\n\n\nRENDERING THIS \n\n\n\n')
-    # drawScene()
-    # exit()
-    # print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
-    #
-    # im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    # im1.save('standardPointPairScene.png')
-    #
-    # print("\n\n")
-    # print("--- %s seconds ---" % (time.time() - start_time))
+def test_render_triangle_facet():
+
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+    k = 1.0
+
+    lights_list = []
+    L = -20. * e1 + 5. * e3 - 10. * e2
+    colour_light = np.ones(3)
+    lights_list.append(Light(L, colour_light))
+    L = 20. * e1 + 5. * e3 - 10. * e2
+    lights_list.append(Light(L, colour_light))
+
+
+    # Construct the camera
+    camera_lookat = e1
+    image_height = 80
+    image_width = 100
+    f = 1.
+    centre3d = - 10. * e2 + 1. * e1
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    # Make the facet
+    p1 = 5 * e2 + -10 * e1 - 4 * e3
+    p2 = 5 * e2 + -10 * e1 + 4 * e2
+    p3 = 4 * e2 + 10 * e1 - 3 * e3
+    object_list = []
+    object_list.append(
+        TriangularFacet(p1, p2, p3, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         max_bounces=2,
+                         shading_options=shading_options)
+
+    # Have a look at what we are rendering
+    new_scene.draw()
+
+    # Render it all
+    imrendered = new_scene.render()
+
+    # Save and show the image
+    plt.imsave('Triangle.png', imrendered.astype(np.uint8))
+    plt.imshow(imrendered)
+    plt.show()
+
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
 
 
-    # p1 = 5*e2 + -10 *e1 - 4 * e3
-    # p2 = 5*e2 + -10 *e1 + 4 * e2
-    # p3 = 4*e2 + 10 * e1 - 3 * e3
-    # scene = []
-    # scene.append(
-    #     TriangularFacet(p1,p2,p3 , np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    # )
+if __name__ == "__main__":
+    test_render_triangle_facet()
 
-    # print('\n\n\n\nRENDERING THIS \n\n\n\n')
-    # drawScene()
-    # print('\n\n\n\n^ RENDERING THIS ^ \n\n\n\n')
 
-    # im1 = Image.fromarray(render().astype('uint8'), 'RGB')
-    # im1.save('triangleScene.png')
-
-    # print("\n\n")
-    # print("--- %s seconds ---" % (time.time() - start_time))

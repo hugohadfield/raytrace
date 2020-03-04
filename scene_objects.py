@@ -355,6 +355,8 @@ class InterpSurface:
         self._bounding_sphere = None
         self.probe_alphas = np.linspace(0, 1, 1000)
 
+        self.grade = grade_obj(C1)
+
     def getColour(self):
         return "rgb(%d, %d, %d)" % (int(self.colour[0] * 255), int(self.colour[1] * 255), int(self.colour[2] * 255))
 
@@ -410,7 +412,7 @@ class InterpSurface:
     @property
     def probes(self):
         if self._probes is None:
-            self._probes = [interp_objects_root(self.first, self.second, alpha) for alpha in self.probe_alphas]
+            self._probes = [interp_objects_root(self.first, self.second, alpha)(self.grade) for alpha in self.probe_alphas]
         return self._probes
 
     @property
@@ -451,7 +453,7 @@ class InterpSurface:
         nprobes = len(self.probes)
         for i in range(20):
             p = self.probes[int(i * nprobes / 20)]
-            gs.add_object(p, color=rgb2hex((self.colour * 255).astype(int)))
+            gs.add_object(p.normal(), color=rgb2hex((self.colour * 255).astype(int)))
         return gs
 
     def intersection_point(self, L, origin):
