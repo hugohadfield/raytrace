@@ -57,10 +57,19 @@ class Camera:
 
 
 class RayScene:
-    def __init__(self, camera=None, object_list=[], light_list=[]):
+    def __init__(self, camera=None,
+                 object_list=[],
+                 light_list=[],
+                 max_bounces=2,
+                 background_color=np.zeros(3),
+                 shading_options={}):
+
         self.obj_list = object_list
         self.light_list = light_list
         self.camera = camera
+        self.background_color = background_color
+        self.max_bounces = max_bounces
+        self.shading_options = shading_options
 
     def draw(self):
         """
@@ -173,7 +182,7 @@ class RayScene:
 
         # If there is no intersection return the background color
         if index is None:
-            return background
+            return self.background_color
         # Otherwise get the object we have hit
         obj = obj_list[index]
 
@@ -190,24 +199,26 @@ class RayScene:
             toL = layout.MultiVector(value=val_normalised(omt_func(omt_func(pX.value, upl_val), einf.value)))
             d = layout.MultiVector(value=imt_func(pX.value, upl_val))[0]
 
-            if options['ambient']:
-                pixel_col += ambient * obj.ambient * obj.colour
+            if self.shading_options['ambient'] > 0:
+                pixel_col += self.shading_options['ambient'] * obj.ambient * obj.colour
 
             # Check for shadows
             Satt = 1.
             if self.intersects(toL, obj_list[:index] + obj_list[index + 1:], pX)[0] is not None:
                 Satt *= 0.8
 
-            fatt = getfattconf(d, a1, a2, a3)
+            fatt = getfattconf(d, self.shading_options['a1'],
+                               self.shading_options['a2'],
+                               self.shading_options['a3'])
 
-            if options['specular']:
+            if self.shading_options['specular']:
                 pixel_col += Satt * fatt * obj.specular * \
                              max(cosangle_between_lines(norm, normalised(toL-ray)), 0) ** obj.spec_k * light.colour
 
-            if options['diffuse']:
+            if self.shading_options['diffuse']:
                 pixel_col += Satt * fatt * obj.diffuse * max(cosangle_between_lines(norm, toL), 0) * obj.colour * light.colour
 
-        if depth >= max_depth:
+        if depth >= self.max_bounces:
             return pixel_col
         pixel_col += obj.reflection * self.trace_ray(reflected, obj_list, pX, depth + 1) #/ ((depth + 1) ** 2)
         return pixel_col
@@ -222,7 +233,6 @@ class RayScene:
         """
         Ray trace the scene
         """
-
         img = np.zeros((self.camera.height, self.camera.width, 3))
         initial = self.RMVR(up(self.camera.Ptl))
         clipped = 0
@@ -258,41 +268,13 @@ class RayScene:
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
 
-    # Shading options
-    a1 = 0.02
-    a2 = 0.0
-    a3 = 0.002
-    options = {'ambient': True, 'specular': True, 'diffuse': True}
-    ambient = 0.3
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+
     k = 1.  # Magic constant to scale everything by the same amount!
-    max_depth = 2 # Maximum number of ray bounces
-
-    background = np.zeros(3)  # [66./520., 185./510., 244./510.]
-
-    # Add objects to the scene:
-    object_list = []
-    D1 = generate_dilation_rotor(0.5)
-    C1 = normalised((D1*random_point_pair()*~D1)(2))
-    C2 = normalised((D1*random_point_pair()*~D1)(2))
-    object_list.append(
-        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-    )
+    background_color = np.zeros(3)  # [66./520., 185./510., 244./510.]
 
     # Light position and color.
     lights_list = []
@@ -302,17 +284,31 @@ if __name__ == "__main__":
     L = 30. * e1 + 5. * e3 - 30. * e2
     lights_list.append(Light(L, colour_light))
 
-
     # Construct the camera
     camera_lookat = e1 + 5.5 * e3
     image_height = 80
     image_width = 100
     f = 1.
     centre3d = -25. * e2 + 1. * e1 + 5.5 * e3
+
+    # Construct objects to render:
+    object_list = []
+    D1 = generate_dilation_rotor(0.5)
+    C1 = normalised((D1*random_point_pair()*~D1)(2))
+    C2 = normalised((D1*random_point_pair()*~D1)(2))
+    object_list.append(
+        PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
     scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
 
     # Construct the scene
-    new_scene = RayScene(camera=scene_camera, light_list=lights_list, object_list=object_list)
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         background_color=background_color,
+                         max_bounces=2,
+                         shading_options=shading_options)
 
     # Have a look at what we are rendering
     new_scene.draw()
