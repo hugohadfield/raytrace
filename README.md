@@ -12,11 +12,12 @@ This project was originally built by [Sushant Achawal](https://github.com/sushac
 
 Here are a couple of the latest rendering from the code in the repo:
 <figure>
-<img src="https://github.com/hugohadfield/raytrace/blob/master/fig.png?raw=true" alt="drawing" width="100%"/>
-</figure>
-<figure>
 <img src="https://github.com/hugohadfield/raytrace/blob/master/Combined.png?raw=true" alt="drawing" width="100%"/>
 </figure>
+<figure>
+<img src="https://github.com/hugohadfield/raytrace/blob/master/fig.png?raw=true" alt="drawing" width="100%"/>
+</figure>
+
 
 ## Usage:
 
