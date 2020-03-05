@@ -7,6 +7,9 @@ from pyganja import *
 
 
 def mesh_grid(nypoints, nxpoints, mask=None, loopx=False):
+    """
+    Meshes a grid of points
+    """
     if loopx:
         if mask is not None:
             mask2 = np.zeros((mask.shape[0],mask.shape[1]+1))

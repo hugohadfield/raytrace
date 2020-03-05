@@ -8,30 +8,38 @@ from math_utils import *
 
 
 def new_sphere(p1, p2, p3, p4):
+    """ Make a sphere from 4 3d points """
     return unsign_sphere(normalised(up(p1) ^ up(p2) ^ up(p3) ^ up(p4)))
 
 
 def new_circle(p1, p2, p3):
+    """ Make a circle from 3 3d points """
     return normalised(up(p1) ^ up(p2) ^ up(p3))
 
 
 def new_plane(p1, p2, p3):
+    """ Make a plane from 3 3d points """
     return normalised(up(p1) ^ up(p2) ^ up(p3) ^ einf)
 
 
 def new_line(p1, p2):
+    """ Make a line from 2 3d points """
     return normalised(up(p1) ^ up(p2) ^ einf)
 
 
 def new_point_pair(p1, p2):
+    """ Make a point pair from 2 3d points """
     return normalised(up(p1) ^ up(p2))
 
 
 def unsign_sphere(S):
-    return normalised(S/(S.dual()|einf)[0])
+    """ Normalise a sphere's sign """
+    return layout.MultiVector(value=val_unsign_sphere(S.value))
+
 
 @numba.njit
 def val_unsign_sphere(S_val):
+    """ Normalise a sphere's sign """
     return val_normalised(S_val / imt_func(dual_func(S_val), einf.value)[0])
 
 
@@ -39,6 +47,9 @@ def val_unsign_sphere(S_val):
 
 @numba.njit
 def val_pointofXSphere(ray_val, sphere_val, origin_val):
+    """
+    Intersection of a ray and a sphere
+    """
     B = meet_val(ray_val, sphere_val)
     if gmt_func(B,B)[0] > 0.000001:
         point_vals = val_point_pair_to_end_points(B)
@@ -50,11 +61,17 @@ def val_pointofXSphere(ray_val, sphere_val, origin_val):
 
 
 def pointofXsphere(ray, sphere, origin):
+    """
+    Intersection of a ray and a sphere
+    """
     return val_pointofXSphere(ray.value, sphere.value, origin.value)
 
 
 @numba.njit
 def val_pointofXplane(ray_val, plane_val, origin_val):
+    """
+    Intersection of a ray and a plane
+    """
     pX = val_intersect_line_and_plane_to_point(ray_val, plane_val)
     if pX[0] == -1.:
         return pX
@@ -67,10 +84,16 @@ def val_pointofXplane(ray_val, plane_val, origin_val):
 
 
 def pointofXplane(ray, plane, origin):
+    """
+    Intersection of a ray and a plane
+    """
     return val_pointofXplane(ray.value, plane.value, origin.value)
 
 
 def val_pointofXcircle(ray_val, circle_val, origin_val):
+    """
+    Intersection of a ray and a circle
+    """
     m = meet_val(ray_val, circle_val)
     if (np.abs(m) <= 0.000001).all():
         return np.array([-1.])
@@ -81,14 +104,23 @@ def val_pointofXcircle(ray_val, circle_val, origin_val):
 
 
 def pointofXcircle(ray, circle, origin):
+    """
+    Intersection of a ray and a circle
+    """
     return val_pointofXcircle(ray.value, circle.value, origin.value)
 
 
 def pointofXsurface(L, surf, origin):
+    """
+    Intersection of a ray and a surface object
+    """
     return surf.intersection_point(L, origin)
 
 
 def cosangle_between_lines(l1, l2):
+    """
+    Calculate the cosign between the lines
+    """
     return (l1 | l2)[0]
 
 
@@ -101,16 +133,23 @@ def getfatt(d, a1, a2, a3):
 
 
 def reflect_in_sphere(ray, sphere, pX):
+    """ Reflects a ray in a sphere """
     return normalised((pX|(sphere*ray*sphere))^einf)
 
 
 @numba.njit
 def val_interp_objects_root(C1_val, C2_val, alpha):
+    """
+    Interpolates C1 and C2 with alpha, note alpha is 1-alpha compared with cliford.tools.g3c
+    """
     C_temp = (1-alpha) * C1_val + alpha * C2_val
     return val_normalised(neg_twiddle_root_val(C_temp)[0])
 
 
-def my_interp_objects_root(C1, C2, alpha):
+def alt_interp_objects_root(C1, C2, alpha):
+    """
+    Interpolates C1 and C2 with alpha, note alpha is 1-alpha compared with cliford.tools.g3c
+    """
     return layout.MultiVector(value=val_interp_objects_root(C1.value, C2.value, alpha))
 
 
@@ -533,7 +572,7 @@ class CircleSurface(InterpSurface):
         This is specific per type of surface and hence needs overwriting
         """
         # For each alpha val make the plane associated with it
-        interp_circle = my_interp_objects_root(self.first, self.second, alpha)
+        interp_circle = alt_interp_objects_root(self.first, self.second, alpha)
         plane1_val = val_normalised(omt_func(interp_circle.value, einf.value))
 
         # Check if the line lies in this plane
@@ -551,7 +590,7 @@ class CircleSurface(InterpSurface):
         """
         dotC = val_differentiateLinearCircle(alpha, self.second.value, self.first.value)
         dotC = layout.MultiVector(value=dotC)
-        C = my_interp_objects_root(self.first, self.second, alpha)
+        C = alt_interp_objects_root(self.first, self.second, alpha)
         omegaC = C * dotC
         dotP = P | omegaC
         LT = (dotP ^ P ^ einf)
@@ -564,9 +603,9 @@ class CircleSurface(InterpSurface):
         Get the normal at of the surface at the point P that corresponds to alpha
         Via numerical techniques
         """
-        Aplus = my_interp_objects_root(self.first, self.second, alpha + 0.001)
-        Aminus = my_interp_objects_root(self.first, self.second, alpha - 0.001)
-        A = my_interp_objects_root(self.first, self.second, alpha)
+        Aplus = alt_interp_objects_root(self.first, self.second, alpha + 0.001)
+        Aminus = alt_interp_objects_root(self.first, self.second, alpha - 0.001)
+        A = alt_interp_objects_root(self.first, self.second, alpha)
         Pplus = project_points_to_circle([P], Aplus)[0]
         Pminus = project_points_to_circle([P], Aminus)[0]
         CA = (Pminus ^ P ^ Pplus)
@@ -585,6 +624,14 @@ class CircleSurface(InterpSurface):
 class PointPairSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._diff_probes = None
+
+    @property
+    def diff_probes(self):
+        if self._diff_probes is None:
+            self._diff_probes = [project_val(val_differentiateLinearPointPair(alpha, self.first.value, self.second.value), self.grade) for alpha in
+                            self.probe_alphas]
+        return self._diff_probes
 
     @property
     def probe_func(self):
@@ -593,7 +640,7 @@ class PointPairSurface(InterpSurface):
         """
         if self._probe_func is None:
             ntcmats = len(self.probes)
-            pms = np.array([p.value for p in self.probes])
+            pms = np.array([p for p in self.diff_probes])
 
             @numba.njit
             def tcf(L):
@@ -623,7 +670,7 @@ class PointPairSurface(InterpSurface):
         This is specific per type of surface and hence needs overwriting
         """
         # For each alpha val make the plane associated with it
-        interp_pp = my_interp_objects_root(self.first, self.second, alpha)
+        interp_pp = alt_interp_objects_root(self.first, self.second, alpha)
         ppl = normalised(interp_pp ^ einf)
 
         # Get the point
@@ -636,9 +683,9 @@ class PointPairSurface(InterpSurface):
         Get the normal at of the surface at the point P that corresponds to alpha
         Via numerical techniques
         """
-        Aplus = normalised(my_interp_objects_root(self.first, self.second, alpha + 0.001) ^ einf)
-        Aminus = normalised(my_interp_objects_root(self.first, self.second, alpha - 0.001) ^ einf)
-        A = my_interp_objects_root(self.first, self.second, alpha)
+        Aplus = normalised(alt_interp_objects_root(self.first, self.second, alpha + 0.001) ^ einf)
+        Aminus = normalised(alt_interp_objects_root(self.first, self.second, alpha - 0.001) ^ einf)
+        A = alt_interp_objects_root(self.first, self.second, alpha)
         Pplus = project_points_to_line([P], Aplus)[0]
         Pminus = project_points_to_line([P], Aminus)[0]
         CA = (Pminus ^ P ^ Pplus)
@@ -653,7 +700,7 @@ class PointPairSurface(InterpSurface):
         """
         dotC = val_differentiateLinearPointPair(alpha, self.second.value, self.first.value)
         dotC = layout.MultiVector(value=dotC)
-        C = my_interp_objects_root(self.first, self.second, alpha)
+        C = alt_interp_objects_root(self.first, self.second, alpha)
         omegaC = C * dotC
         dotP = P | omegaC
         LT = (dotP ^ P ^ einf)

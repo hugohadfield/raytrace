@@ -73,78 +73,26 @@ class RayScene:
 
     def draw(self):
         """
-        Draws the scene in GAOnline and pyganja
+        Draws the scene in pyganja
         """
         Ptr = self.camera.Ptl + 2*e1*self.camera.xmax
         Pbl = self.camera.Ptl - 2*e3*self.camera.ymax
         Pbr = Ptr - 2*e3*self.camera.ymax
         rect = [self.camera.Ptl, Ptr, Pbr, Pbl]
-
-        sc = GAScene()
-
-        #Draw Camera transformation
-        # sc.add_line(original, red)
-        cam_c_line = (self.camera.MVR*self.camera.original*~self.camera.MVR).normal()
-        cam_pos = self.camera.upcam
-        sc.add_line(cam_c_line, red)
-        sc.add_euc_point(cam_pos, blue)
-        sc.add_euc_point(up(self.camera.lookat), blue)
-
-        #Draw screen corners
         scorners = [self.RMVR(up(pnt)) for pnt in rect]
-        for scorn in scorners:
-            sc.add_euc_point(scorn, cyan)
-
-        #Draw screen rectangle
-
-        top = new_point_pair(self.camera.Ptl, Ptr)
-        right = new_point_pair(Ptr, Pbr)
-        bottom = new_point_pair(Pbr, Pbl)
-        left = new_point_pair(Pbl, self.camera.Ptl)
-        diag = new_point_pair(self.camera.Ptl, Pbr)
-        sides = [top, right, bottom, left, diag]
-        for side in sides:
-            sc.add_point_pair(self.RMVR(side), dark_blue)
-
+        cam_c_line = (self.camera.MVR*self.camera.original*~self.camera.MVR).normal()
         tl = new_line(eo, self.camera.Ptl)
         tr = new_line(eo, Ptr)
         bl = new_line(eo, Pbl)
         br = new_line(eo, Pbr)
-
         lines = [tl, tr, br, bl]
-        for line in lines:
-            sc.add_line(self.RMVR(line).normal(), dark_blue)
-        for objects in self.obj_list:
-            if objects.type == "Sphere":
-                sc.add_sphere(objects.object, objects.getColour())
-            elif objects.type == "Plane":
-                sc.add_plane(objects.object, objects.getColour())
-            elif objects.type == "Triangle":
-                sc.add_point_pair(objects.p1, objects.getColour())
-                sc.add_point_pair(objects.p2, objects.getColour())
-                sc.add_point_pair(objects.p3, objects.getColour())
-            elif objects.type == "Circle":
-                sc.add_circle(objects.object, objects.getColour())
-            else:
-                col = objects.getColour()
-                sc.add_point_pair(objects.first, col)
-                sc.add_point_pair(objects.second, col)
-                for circles in [interp_objects_root(objects.first, objects.second, alpha/100) for alpha in range(1,100,5)]:
-                    sc.add_point_pair(circles, col)
-
-        for light in self.light_list:
-            l = light.position
-            sc.add_euc_point(up(l), yellow)
-            sc.add_sphere(new_sphere(l + e1, l+e2, l+e3, l-e1), yellow)
-
-        print(sc)
 
         gs = GanjaScene()
         for s in self.obj_list:
             gs += s.as_scene()
         for l in self.light_list:
             gs += l.as_scene()
-        gs.add_object(cam_pos, color=Color.BLACK)
+        gs.add_object(self.camera.upcam, color=Color.BLACK)
         gs.add_object(cam_c_line, color=Color.CYAN)
         gs.add_objects([self.RMVR(l) for l in lines], color=Color.BLUE)
         gs.add_objects(scorners, color=Color.BLACK)
@@ -268,6 +216,65 @@ class RayScene:
 
 
 
+def test_render_random_circle_scene():
+
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+
+    k = 1.  # Magic constant to scale everything by the same amount!
+    background_color = np.zeros(3)  # [66./520., 185./510., 244./510.]
+
+    # Light position and color.
+    lights_list = []
+    L = -30. * e1 + 5. * e3 - 30. * e2
+    colour_light = np.ones(3)
+    lights_list.append(Light(L, colour_light))
+    L = 30. * e1 + 5. * e3 - 30. * e2
+    lights_list.append(Light(L, colour_light))
+
+    # Construct the camera
+    camera_lookat = e1 + 5.5 * e3
+    image_height = 160
+    image_width = 200
+    f = 1.
+    centre3d = -25. * e2 + 1. * e1 + 5.5 * e3
+
+    # Construct objects to render:
+    object_list = []
+    D1 = generate_dilation_rotor(0.5)
+    C1 = normalised((D1*random_circle()*~D1)(3))
+    C2 = normalised((D1*random_circle()*~D1)(3))
+    object_list.append(
+        CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+    )
+
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         background_color=background_color,
+                         max_bounces=5,
+                         shading_options=shading_options)
+
+    # Have a look at what we are rendering
+    new_scene.draw()
+
+    # Render it all
+    imrendered = new_scene.render()
+
+
+    # Save and show the image
+    plt.imsave('Circle.png', imrendered.astype(np.uint8))
+    plt.imshow(imrendered.astype(np.uint8))
+    plt.show()
+
+
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+
 
 
 def test_render_random_point_pair_scene():
@@ -346,8 +353,8 @@ def test_render_standard_point_pair_scene():
 
     # Construct the camera
     camera_lookat = e1
-    image_height = 80
-    image_width = 100
+    image_height = 160
+    image_width = 200
     f = 1.
     centre3d = - 10. * e2 + 1. * e1
     scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
@@ -440,8 +447,7 @@ def test_render_triangle_facet():
     print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
 
-
 if __name__ == "__main__":
-    test_render_triangle_facet()
+    test_render_random_circle_scene()
 
 
