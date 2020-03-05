@@ -3,8 +3,10 @@ import numba
 import numpy as np
 from clifford.tools.g3c import *
 from clifford.tools.g3c.GAOnline import *
+from meshing import *
 from pyganja import *
 from math_utils import *
+
 
 
 def new_sphere(p1, p2, p3, p4):
@@ -30,19 +32,6 @@ def new_line(p1, p2):
 def new_point_pair(p1, p2):
     """ Make a point pair from 2 3d points """
     return normalised(up(p1) ^ up(p2))
-
-
-def unsign_sphere(S):
-    """ Normalise a sphere's sign """
-    return layout.MultiVector(value=val_unsign_sphere(S.value))
-
-
-@numba.njit
-def val_unsign_sphere(S_val):
-    """ Normalise a sphere's sign """
-    return val_normalised(S_val / imt_func(dual_func(S_val), einf.value)[0])
-
-
 
 
 @numba.njit
@@ -620,6 +609,20 @@ class CircleSurface(InterpSurface):
         normal = normalised(self.get_analytic_normal(alpha, pX))
         return normalised((-normal * L * normal)(3))
 
+    def mesh(self, n_points=21, n_alpha=21):
+        """
+        Meshes the surface
+        """
+        vertex_list, face_list = mesh_circle_surface(self.first, self.second, n_points=n_points, n_alpha=n_alpha)
+        return vertex_list, face_list
+
+    def as_mesh_scene(self, n_points=21, n_alpha=21):
+        """
+        Meshes the surface and adds it to a GanjaScene
+        """
+        ga_vertices, face_list = self.mesh(n_points=n_points, n_alpha=n_alpha)
+        return get_facet_scene(ga_vertices, face_list)
+
 
 class PointPairSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
@@ -640,7 +643,7 @@ class PointPairSurface(InterpSurface):
         """
         if self._probe_func is None:
             ntcmats = len(self.probes)
-            pms = np.array([p for p in self.diff_probes])
+            pms = np.array([p.value for p in self.probes])
 
             @numba.njit
             def tcf(L):

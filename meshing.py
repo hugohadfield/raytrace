@@ -57,13 +57,7 @@ def get_facet_scene(ga_vertices, face_list):
     Converts a set of vertices and face lists into a pyganja scene
     """
     gs = GanjaScene()
-    for f in face_list:
-        #plane = (MVArray([layout.MultiVector(value=ga_vertices[i,:]) for i in f]).op()^einf).normal()
-        # if point_beyond_plane(up(e3), plane):
-        #     c = Color.RED
-        # else:
-        c = int('AA000000',16)
-        gs.add_facet([ga_vertices[i] for i in f], color=c)
+    gs.add_facets([[ga_vertices[i] for i in f] for f in face_list], color=int('AA000000',16), static=True)
     return gs
 
 
@@ -93,17 +87,18 @@ def mesh_circle_surface(C1, C2, n_points=21, n_alpha=21):
     return vertex_list, face_list
 
 
-n_alpha = 21
-n_points = 21
+def test_mesh_circles():
+    n_alpha = 21
+    n_points = 21
 
-# C1 = normalised(up(5*e3+e1)^up(5*e3+e2)^up(5*e3-e1))
-# C2 = normalised(up(e1)^up(e2)^up(-e1))
-C1 = random_circle()
-C2 = random_circle()
+    # C1 = normalised(up(5*e3+e1)^up(5*e3+e2)^up(5*e3-e1))
+    # C2 = normalised(up(e1)^up(e2)^up(-e1))
+    C1 = random_circle()
+    C2 = random_circle()
 
-vertex_list, face_list = mesh_circle_surface(C1, C2, n_points=n_points, n_alpha=n_alpha)
+    vertex_list, face_list = mesh_circle_surface(C1, C2, n_points=n_points, n_alpha=n_alpha)
 
-gs = get_facet_scene(vertex_list, face_list)
-gs.add_objects(vertex_list, static=True)
-gs.add_objects([interp_objects_root(C1,C2,alp) for alp in np.linspace(0,1,n_alpha)],color=Color.RED)
-draw(gs,scale=0.1)
+    gs = get_facet_scene(vertex_list, face_list)
+    gs.add_objects(vertex_list, static=True)
+    gs.add_objects([interp_objects_root(C1,C2,alp) for alp in np.linspace(0,1,n_alpha)],color=Color.RED)
+    draw(gs,scale=0.1)

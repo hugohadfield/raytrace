@@ -71,16 +71,14 @@ class RayScene:
         self.max_bounces = max_bounces
         self.shading_options = shading_options
 
-    def draw(self):
-        """
-        Draws the scene in pyganja
-        """
-        Ptr = self.camera.Ptl + 2*e1*self.camera.xmax
-        Pbl = self.camera.Ptl - 2*e3*self.camera.ymax
-        Pbr = Ptr - 2*e3*self.camera.ymax
+    def as_scene(self):
+        """ Generates a GanjaScene """
+        Ptr = self.camera.Ptl + 2 * e1 * self.camera.xmax
+        Pbl = self.camera.Ptl - 2 * e3 * self.camera.ymax
+        Pbr = Ptr - 2 * e3 * self.camera.ymax
         rect = [self.camera.Ptl, Ptr, Pbr, Pbl]
         scorners = [self.RMVR(up(pnt)) for pnt in rect]
-        cam_c_line = (self.camera.MVR*self.camera.original*~self.camera.MVR).normal()
+        cam_c_line = (self.camera.MVR * self.camera.original * ~self.camera.MVR).normal()
         tl = new_line(eo, self.camera.Ptl)
         tr = new_line(eo, Ptr)
         bl = new_line(eo, Pbl)
@@ -96,8 +94,15 @@ class RayScene:
         gs.add_object(cam_c_line, color=Color.CYAN)
         gs.add_objects([self.RMVR(l) for l in lines], color=Color.BLUE)
         gs.add_objects(scorners, color=Color.BLACK)
-        draw(gs, scale=0.1, browser_window=True)
+        return gs
 
+    def draw(self, scale=0.05, browser_window=True):
+        """
+        Draws the scene in pyganja
+        """
+        gs = self.as_scene()
+        draw(gs, scale=scale, browser_window=browser_window)
+        return gs
 
     def intersects(self, ray, obj_list, origin):
         """
@@ -121,7 +126,7 @@ class RayScene:
 
 
     def trace_ray(self, ray, obj_list, origin, depth):
-
+        """ Trace a ray """
         # Initialise the pixel color
         pixel_col = np.zeros(3)
 
@@ -259,7 +264,9 @@ def test_render_random_circle_scene():
                          shading_options=shading_options)
 
     # Have a look at what we are rendering
-    new_scene.draw()
+    gs = new_scene.as_scene()
+    gs += object_list[0].as_mesh_scene()
+    draw(gs, scale=0.1, browser_window=True)
 
     # Render it all
     imrendered = new_scene.render()
@@ -447,7 +454,75 @@ def test_render_triangle_facet():
     print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
 
-if __name__ == "__main__":
-    test_render_random_circle_scene()
+def test_render_combined_scene():
 
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+    k = 1.0
+
+    lights_list = []
+    colour_light = np.ones(3)
+    L = 40. * e3 - 20*e2
+    lights_list.append(Light(L, colour_light))
+
+
+    # Construct the camera
+    camera_lookat = e1
+    image_height = 480
+    image_width = 640
+    f = 1.
+    centre3d = - 30. * e2 + 1. * e1
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    # Make the objects
+    object_list = [
+        TriangularFacet(5 * e2 + -10 * e1 - 4 * e3,
+                        5 * e2 + -10 * e1 + 4 * e2,
+                        4 * e2 + 5 * e1 + 10* e3,
+                        np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.1),
+        Plane(-10*e3,-10*e3+e2,-10*e3+e1, np.array([0., 1., 1.]), k * 1., 100., k * .5, k * 1., k * 0.3),
+        Sphere(-20*e1+10*e3+15*e2, 10, np.array([0,1,0]), k * 1., 100., k * .5, k * 1., k * 0.8),
+    ]
+
+
+    C1 = (0.35248 ^ e123) + (1.03714 ^ e124) + (1.09103 ^ e125) - (1.54886 ^ e134) - (1.69214 ^ e135) - (0.18478 ^ e145) - (0.28709 ^ e234) - (0.4307 ^ e235) - (0.37867 ^ e245) + (0.51436 ^ e345)
+    C2 = - (0.18382 ^ e123) - (0.29091 ^ e124) - (0.15306 ^ e125) + (0.05345 ^ e134) + (0.11571 ^ e135) + (0.13862 ^ e145) - (1.13955 ^ e234) - (1.17752 ^ e235) - (0.9147 ^ e245) - (0.37491 ^ e345)
+    C1 = average_objects([C1]).normal()
+    C2 = average_objects([C2]).normal()
+    object_list.append(
+        CircleSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
+    )
+    print('C1', C1)
+    print('C2', C2)
+
+
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         max_bounces=5,
+                         shading_options=shading_options)
+
+    # Have a look at what we are rendering
+    new_scene.draw()
+
+    # Render it all
+    imrendered = new_scene.render()
+
+    # Save and show the image
+    plt.imsave('Combined.png', imrendered.astype(np.uint8))
+    plt.imshow(imrendered.astype(np.uint8))
+    plt.show()
+
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+
+
+
+if __name__ == "__main__":
+    # test_render_standard_point_pair_scene()
+    # test_render_random_circle_scene()
+    test_render_combined_scene()
 
