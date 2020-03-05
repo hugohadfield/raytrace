@@ -468,8 +468,8 @@ def test_render_combined_scene():
 
     # Construct the camera
     camera_lookat = e1
-    image_height = 480
-    image_width = 640
+    image_height = 960
+    image_width = 1280
     f = 1.
     centre3d = - 30. * e2 + 1. * e1
     scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
@@ -484,11 +484,11 @@ def test_render_combined_scene():
         Sphere(-20*e1+10*e3+15*e2, 10, np.array([0,1,0]), k * 1., 100., k * .5, k * 1., k * 0.8),
     ]
 
-
-    C1 = (0.35248 ^ e123) + (1.03714 ^ e124) + (1.09103 ^ e125) - (1.54886 ^ e134) - (1.69214 ^ e135) - (0.18478 ^ e145) - (0.28709 ^ e234) - (0.4307 ^ e235) - (0.37867 ^ e245) + (0.51436 ^ e345)
-    C2 = - (0.18382 ^ e123) - (0.29091 ^ e124) - (0.15306 ^ e125) + (0.05345 ^ e134) + (0.11571 ^ e135) + (0.13862 ^ e145) - (1.13955 ^ e234) - (1.17752 ^ e235) - (0.9147 ^ e245) - (0.37491 ^ e345)
+    C1 = - (0.16887 ^ e123) - (0.75896 ^ e124) - (0.91709 ^ e125) - (0.92729 ^ e134) - (0.97853 ^ e135) + (0.63805 ^ e145) - (0.0462 ^ e234) - (0.12142 ^ e235) - (0.29479 ^ e245) - (0.39902 ^ e345)
+    C2 = (0.36389 ^ e123) - (1.66662 ^ e124) - (1.81194 ^ e125) - (1.36982 ^ e134) - (1.52625 ^ e135) + (0.1694 ^ e145) + (0.84272 ^ e234) + (0.87727 ^ e235) + (0.17834 ^ e245) + (0.23224 ^ e345)
     C1 = average_objects([C1]).normal()
     C2 = average_objects([C2]).normal()
+
     object_list.append(
         CircleSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
     )
