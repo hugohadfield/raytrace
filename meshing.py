@@ -68,6 +68,9 @@ def get_facet_scene(ga_vertices, face_list):
 
 
 def vertex_circles(Clist, n_points):
+    """
+    Generates vertices on the circles
+    """
     C_old = normalised(up(e1)^up(e2)^up(-e1))
     R = generate_rotation_rotor(2*np.pi/n_points, e1, e2)
     pc = [normalise_n_minus_1((R**n)*up(e1)*~(R**n)) for n in range(n_points+1)]
@@ -81,10 +84,14 @@ def vertex_circles(Clist, n_points):
 
 
 def mesh_circle_surface(C1, C2, n_points=21, n_alpha=21):
+    """
+    Generates the circle list
+    """
     Clist = [interp_objects_root(C1,C2,alp) for alp in np.linspace(0,1,n_alpha)]
     vertex_list = vertex_circles(Clist, n_points)
     face_list = mesh_grid(n_alpha, n_points, mask=None, loopx=True)
     return vertex_list, face_list
+
 
 n_alpha = 21
 n_points = 21
