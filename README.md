@@ -33,7 +33,6 @@ The script requires the following non-standard python packages:
 
 [Geometric Algebra][ga] is a super exciting field for exploring 3D geometry and beyond. For further reading into GA see:
 
-* [Mathoma's tutorials][YTtuts] are super cool and provide a good start. Skip to the 9th video if you have some basic understanding of linear algebra in 3D.
 
 * Many of the concepts used in the ray tracer can be found in *A Covariant Approach to Geometry using Geometric Algebra* which can be found online [here][CovApp]. The report really summarises the power of working in the conformal model.
 
@@ -46,10 +45,7 @@ The script requires the following non-standard python packages:
 [matplotlib]: https://github.com/matplotlib/matplotlib
 [Numba]: https://github.com/numba/numba
 [ga]: https://en.wikipedia.org/wiki/Geometric_algebra
-[YTtuts]: https://www.youtube.com/watch?v=PNlgMPzj-7Q&list=PLpzmRsG7u_gqaTo_vEseQ7U8KFvtiJY4K
 [CovApp]: http://www2.montgomerycollege.edu/departments/planet/planet/Numerical_Relativity/GA-SIG/Conformal%20Geometry%20Papers/Cambridge/Covarient%20Approach%20to%20Geometry%20Using%20Geometric%20Algebra.pdf
 [GAforCompSci]: http://www.geometricalgebra.net/
-[BSP]: https://en.wikipedia.org/wiki/Binary_space_partitioning
-[Pillow]: https://github.com/python-pillow/Pillow
 [pyganja]: https://github.com/pygae/pyganja
 [GAOnline]: https://github.com/hugohadfield/GAonline
