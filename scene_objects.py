@@ -719,6 +719,9 @@ class PointPairSurface(InterpSurface):
         return normalised((-normal * L * normal)(3))
 
     def test_point(self, ptest):
+        """
+        Tests a point to see if it is inside the bounding sphere
+        """
         if imt_func(ptest, dual_func(self.bounding_sphere.value))[0] > 0:
             return True
         else:

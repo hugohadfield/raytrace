@@ -1,5 +1,4 @@
 from clifford.tools.g3c import *
-from clifford.tools.g3c.GAOnline import *
 from scene_objects import *
 
 import matplotlib.pyplot as plt
@@ -9,6 +8,7 @@ from pyganja import *
 
 import numpy as np
 import time
+import cProfile
 
 
 red = 'rgb(255, 0 , 0)'
@@ -519,10 +519,68 @@ def test_render_combined_scene():
     print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
 
+def benchmark():
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+    k = 1.0
+
+    lights_list = []
+    colour_light = np.ones(3)
+    L = 40. * e3 - 20*e2
+    lights_list.append(Light(L, colour_light))
+
+
+    # Construct the camera
+    camera_lookat = e1
+    image_height = 240
+    image_width = 320
+    f = 1.
+    centre3d = - 30. * e2 + 1. * e1
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    # Make the objects
+    object_list = [
+        TriangularFacet(5 * e2 + -10 * e1 - 4 * e3,
+                        5 * e2 + -10 * e1 + 4 * e2,
+                        4 * e2 + 5 * e1 + 10* e3,
+                        np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.1),
+        Plane(-10*e3,-10*e3+e2,-10*e3+e1, np.array([0., 1., 1.]), k * 1., 100., k * .5, k * 1., k * 0.3),
+        Sphere(-20*e1+10*e3+15*e2, 10, np.array([0,1,0]), k * 1., 100., k * .5, k * 1., k * 0.8),
+    ]
+
+    C1 = - (0.16887 ^ e123) - (0.75896 ^ e124) - (0.91709 ^ e125) - (0.92729 ^ e134) - (0.97853 ^ e135) + (0.63805 ^ e145) - (0.0462 ^ e234) - (0.12142 ^ e235) - (0.29479 ^ e245) - (0.39902 ^ e345)
+    C2 = (0.36389 ^ e123) - (1.66662 ^ e124) - (1.81194 ^ e125) - (1.36982 ^ e134) - (1.52625 ^ e135) + (0.1694 ^ e145) + (0.84272 ^ e234) + (0.87727 ^ e235) + (0.17834 ^ e245) + (0.23224 ^ e345)
+    C1 = average_objects([C1]).normal()
+    C2 = average_objects([C2]).normal()
+
+    object_list.append(
+        CircleSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
+    )
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         max_bounces=5,
+                         shading_options=shading_options)
+
+    # Render it all
+    imrendered = new_scene.render()
+
+    # Save and show the image
+    plt.imsave('benchmark.png', imrendered.astype(np.uint8))
+    # plt.imshow(imrendered.astype(np.uint8))
+    # plt.show()
+
+    print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+    print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+
+def test_benchmark():
+    for i in range(5):
+        benchmark()
 
 
 if __name__ == "__main__":
-    # test_render_standard_point_pair_scene()
-    # test_render_random_circle_scene()
-    test_render_combined_scene()
+    test_benchmark()
 
