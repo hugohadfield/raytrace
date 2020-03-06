@@ -194,22 +194,9 @@ class TestCombo(unittest.TestCase):
                     Pval, alpha = surf.intersection_point(L, up(centre3d))
 
                     if Pval[0] == -1:
-
-                        # gs = new_scene.as_scene()
-                        # surf.plot_probe_func(L)
-                        #
-                        # talphas = surf.intersection_func(L.value)
-                        # print(talphas)
-                        # print(surf.bound_func(L.value))
-                        # print(alpha)
-                        # print(surf.intersect_at_alpha(L, up(centre3d), talphas[0]))
-                        # print('\n\n\n\n', flush=True)
-                        #
-                        # hit_error += 1
-                        # gs.add_objects([L], color=Color.BLACK)
-                        # gs.add_objects([P_tru], color=Color.BLUE)
-                        # gs.add_objects([L])
-                        # draw(gs)
+                        hit_error += 1
+                        gs.add_objects([L], color=Color.BLACK)
+                        gs.add_objects([P_tru], color=Color.BLUE)
                         continue
                     else:
                         P = layout.MultiVector(value=Pval)
@@ -244,56 +231,6 @@ class TestCombo(unittest.TestCase):
         print('Double errors: ', double_error, 'of ', total_hits, 'ie. ', 100 * double_error / total_hits, '%')
         print('\n', flush=True)
         draw(gs, scale=0.5)
-
-    def test_spline_hit_diff(self):
-
-        origin = (10*e3+5*e2-e1)
-        C1 = (up(e1 + e2)^up(e1 -e2)^up(e1 + e3)).normal()
-        C2 = (up(-e1 + e2 + 5*e3)^up(-e1 -e2 + 5*e3)^up(-e1 + e3 + 5*e3)).normal()
-        S = unsign_sphere(C1.join(C2)(4)).normal()
-        Cin = up(down((C1 + C2)*einf*(C1 + C2))+e1)
-        L = (up(origin)^Cin^einf).normal()
-
-        surf = CircleSurface(C1, C2, np.array([0., 0., 1.]), 1., 100., .5, 1., 0.)
-
-        pointofXsurface(L, surf, origin)
-
-        alpha_list = np.linspace(0, 1, 100)
-        interp_list = [interp_objects_root(C1,C2,alpha) for alpha in alpha_list]
-        meet_list = []
-        for C in interp_list:
-            meet_list.append((meet(L, C) ** 2)[0])
-
-        alpha_probe = np.linspace(0, 1, 20)
-        probe_list = [interp_objects_root(C1, C2, alpha) for alpha in alpha_probe]
-        probe_meet = []
-        for C in probe_list:
-            probe_meet.append((meet(L, C) ** 2)[0])
-
-        alpha_spline = scipy.interpolate.Akima1DInterpolator(alpha_probe, probe_meet)
-        alpha_vals = alpha_spline.roots()
-        alpha_vals = [a for a in alpha_vals if a < 1 and a > 0]
-        if len(alpha_vals) == 1:
-            print('Single Hit')
-            print(alpha_vals)
-        if len(alpha_vals) == 2:
-            print('Double Hit')
-            print(alpha_vals)
-        if len(alpha_vals) > 2:
-            print('OOPS')
-            print(alpha_vals)
-
-
-        plt.plot(alpha_list, meet_list)
-        plt.plot(alpha_probe, probe_meet)
-        plt.plot(alpha_list, alpha_spline(alpha_list))
-        plt.show()
-
-        trace_check = surf.probe_func(L.value)
-        plt.plot(surf.probe_alphas, trace_check)
-        plt.show()
-
-        #draw([up(origin), L, C1, C2] + interp_list)
 
 
 
