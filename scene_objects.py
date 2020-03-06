@@ -7,6 +7,7 @@ from meshing import *
 from pyganja import *
 from math_utils import *
 
+import matplotlib.pyplot as plt
 
 
 def new_sphere(p1, p2, p3, p4):
@@ -123,7 +124,8 @@ def getfatt(d, a1, a2, a3):
 
 def reflect_in_sphere(ray, sphere, pX):
     """ Reflects a ray in a sphere """
-    return normalised((pX|(sphere*ray*sphere))^einf)
+    pln = (pX|sphere) ^ einf
+    return normalised((pln*ray*pln)(3))
 
 
 @numba.njit
@@ -518,6 +520,15 @@ class InterpSurface:
     def test_point(self, ptest):
         return True
 
+    def plot_probe_func(self, L):
+        """
+        Plots the intersection function
+        """
+        res = self.probe_func(L.value)
+        plt.plot(self.probe_alphas, res)
+        plt.plot(self.probe_alphas, self.probe_alphas*0, 'r')
+        plt.show()
+
 
 class CircleSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
@@ -659,10 +670,16 @@ class PointPairSurface(InterpSurface):
     @property
     def bounding_sphere(self):
         """
-        Finds an approximate bounding sphere for a set of circles
+        Finds a bounding sphere for two point pairs
         """
         if self._bounding_sphere is None:
-            self._bounding_sphere = unsign_sphere(self.first ^ self.second)
+            if np.sum(np.abs(self.first ^ self.second)) < 1E-6:
+                Sim = (point_pair_to_end_points(self.first)[0] + point_pair_to_end_points(self.second)[1])
+                r = np.abs(get_radius_from_sphere((I5*Sim).normal()))
+                S = (normalise_n_minus_1((Sim*einf*Sim)(1)) - 0.5*r*r*einf)*I5
+                self._bounding_sphere = unsign_sphere(S)
+            else:
+                self._bounding_sphere = unsign_sphere(self.first ^ self.second)
         return self._bounding_sphere
 
     def intersect_at_alpha(self, L, origin, alpha):
@@ -722,7 +739,7 @@ class PointPairSurface(InterpSurface):
         """
         Tests a point to see if it is inside the bounding sphere
         """
-        if imt_func(ptest, dual_func(self.bounding_sphere.value))[0] > 0:
+        if imt_func(ptest, dual_func(self.bounding_sphere.value))[0] >= 0:
             return True
         else:
             return False
