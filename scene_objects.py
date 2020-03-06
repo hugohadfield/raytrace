@@ -659,7 +659,6 @@ class PointPairSurface(InterpSurface):
             @numba.njit
             def tcf(L):
                 output = np.zeros(ntcmats)
-                # Lval = dual_func(L)
                 for i in range(ntcmats):
                     output[i] = omt_func(pms[i, :], L)[31]
                 return output
