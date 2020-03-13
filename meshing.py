@@ -6,6 +6,17 @@ from clifford.tools.g3c import *
 from pyganja import *
 
 
+def write_obj_file(filename, vertices, faces, vertex_normals=None):
+    """ Writes a .obj file """
+    with open(filename, 'w') as fobj:
+        for v in vertices:
+            print("v %f %f %f"%(v[0],v[1],v[2]), file=fobj)
+        for f in faces:
+            print("f %d %d %d"%(f[0]+1,f[1]+1,f[2]+1), file=fobj)
+        if vertex_normals is not None:
+            # TODO make this work
+            pass
+
 def mesh_grid(nypoints, nxpoints, mask=None, loopx=False):
     """
     Meshes a grid of points
@@ -102,3 +113,19 @@ def test_mesh_circles():
     gs.add_objects(vertex_list, static=True)
     gs.add_objects([interp_objects_root(C1,C2,alp) for alp in np.linspace(0,1,n_alpha)],color=Color.RED)
     draw(gs,scale=0.1)
+
+
+def test_obj_circles():
+    n_alpha = 41
+    n_points = 41
+
+    for i in range(100):
+        C1 = random_circle()
+        C2 = random_circle()
+        vertex_list, face_list = mesh_circle_surface(C1, C2, n_points=n_points, n_alpha=n_alpha)
+        threedvertexlist = [down(v).value[1:4] for v in vertex_list]
+        write_obj_file("surfaces/test{:02d}.obj".format(i), threedvertexlist, face_list)
+
+
+if __name__ == '__main__':
+    test_obj_circles()
