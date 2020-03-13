@@ -144,6 +144,43 @@ def alt_interp_objects_root(C1, C2, alpha):
     return layout.MultiVector(value=val_interp_objects_root(C1.value, C2.value, alpha))
 
 
+def sqsq(sigma):
+    """
+    The function [[Sigma]]
+    """
+    return np.sqrt(sigma[0]**2 - (sigma(4)**2)[0])
+
+
+def differential_sqsq(sigma, dsda):
+    """
+    The differential of [[Sigma]]
+    """
+    left = dsda[0]*sigma[0] + sigma[0]*dsda[0]
+    right = (dsda(4)*sigma(4) + sigma(4)*dsda(4))[0]
+    return (left - right)/(2*sqsq(sigma))
+
+
+def differential_root_sigma(sigma, dsda):
+    """
+    The differential of square root of sigma
+    """
+    dsqsq = differential_sqsq(sigma, dsda)
+    sqsqsig = sqsq(sigma)
+    left = ( dsda + dsqsq ) * ( 1.0 / ( np.sqrt(2)*np.sqrt( sigma[0] + sqsqsig ) ) )
+    rightdiff = ((-1.0/(2*np.sqrt(2)))*( sigma[0] + sqsqsig[0] )**(-3.0/2))*( dsda[0] + dsqsq )
+    right = ( sigma + sqsqsig ) * ( 1.0 / ( np.sqrt(2)*np.sqrt( sigma[0] + sqsqsig ) ) ) * rightdiff
+    total = left + right
+    return total
+
+
+
+# def differentiate_manifold_projection(alpha, X1, X2):
+#     # Raw interpolant and derivative
+#     Xdash = alpha*X1 + (1- alpha)*X2
+#     dXdashdalpha = X1 - X2
+
+#     sigma = -Xdash*~Xdash
+#     drootsigmadalpha = differential_root_sigma(sigma, dsda)
 
 
 @numba.njit

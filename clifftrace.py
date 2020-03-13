@@ -23,6 +23,7 @@ db = [0.033, 0., 0.33]
 
 
 class Light:
+    """ A point light source """
     def __init__(self, position, colour):
         self.position = position
         self.colour = colour
@@ -35,6 +36,7 @@ class Light:
 
 
 class Camera:
+    """ A perspective pin hole camera """
     def __init__(self, centre3d, lookat, f, height, width):
 
         self.upcam = up(centre3d)
@@ -57,6 +59,7 @@ class Camera:
 
 
 class RayScene:
+    """ A ray traced scene """
     def __init__(self, camera=None,
                  object_list=[],
                  light_list=[],
@@ -360,8 +363,8 @@ def test_render_standard_point_pair_scene():
 
     # Construct the camera
     camera_lookat = e1
-    image_height = 160
-    image_width = 200
+    image_height = 480
+    image_width = 600
     f = 1.
     centre3d = - 10. * e2 + 1. * e1
     scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
@@ -582,4 +585,4 @@ def test_benchmark():
 
 
 if __name__ == "__main__":
-    test_benchmark()
+    test_render_random_circle_scene()
