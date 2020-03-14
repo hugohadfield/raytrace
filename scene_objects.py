@@ -406,7 +406,8 @@ class Circle:
 
 
 class InterpSurface:
-    def __init__(self, C1, C2, colour, specular, spec_k, amb, diffuse, reflection):
+    def __init__(self, C1, C2, colour=[0,0,0], specular=0, spec_k=0, 
+                 amb=0, diffuse=0, reflection=0):
         self.first = C1
         self.second = C2
         self.colour = colour
@@ -661,14 +662,26 @@ class CircleSurface(InterpSurface):
         """
         Meshes the surface
         """
-        vertex_list, face_list = mesh_circle_surface(self.first, self.second, n_points=n_points, n_alpha=n_alpha)
-        return vertex_list, face_list
+        vertex_list, face_list, alpha_list = mesh_circle_surface(self.first, self.second, n_points=n_points, n_alpha=n_alpha)
+        return vertex_list, face_list, alpha_list
+
+    def vertex_normal_lines(self, ga_vertices, alpha_list):
+        """
+        For a list of surface vertices ga_vertices this returns the 
+        normal to the surface at that point
+        """
+        npoints = len(ga_vertices)/len(alpha_list)
+        output_lines = []
+        for i, P in enumerate(ga_vertices):
+            alpha = alpha_list[int(i/npoints)]
+            output_lines.append( self.get_analytic_normal(alpha, P) )
+        return output_lines
 
     def as_mesh_scene(self, n_points=21, n_alpha=21):
         """
         Meshes the surface and adds it to a GanjaScene
         """
-        ga_vertices, face_list = self.mesh(n_points=n_points, n_alpha=n_alpha)
+        ga_vertices, face_list, alpha_list = self.mesh(n_points=n_points, n_alpha=n_alpha)
         return get_facet_scene(ga_vertices, face_list)
 
 
@@ -780,3 +793,25 @@ class PointPairSurface(InterpSurface):
         else:
             return False
 
+
+def test_obj_circles():
+    n_alpha = 41
+    n_points = 41
+
+    for i in range(100):
+        print(i)
+        C1 = random_circle()
+        C2 = random_circle()
+
+        csurf = CircleSurface(C1, C2)
+        vertex_list, face_list, alpha_list = csurf.mesh(n_points=n_points, n_alpha=n_alpha)
+
+        normal_lines = csurf.vertex_normal_lines(vertex_list, alpha_list)
+        threedns = [-((n*I5)(e123)*I3).normal().value[1:4] for n in normal_lines]
+
+        threedvertexlist = [down(v).value[1:4] for v in vertex_list]
+        write_obj_file("surfaces/test{:02d}.obj".format(i), threedvertexlist, face_list, threedns)
+
+
+if __name__ == '__main__':
+    test_obj_circles()
