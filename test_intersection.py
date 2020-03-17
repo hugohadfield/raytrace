@@ -118,7 +118,7 @@ class TestCombo(unittest.TestCase):
         print('Reflection errors: ', ref_error, 'of ', total_hits, 'ie. ', 100 * ref_error / total_hits, '%')
         print('Double errors: ', double_error, 'of ', total_hits, 'ie. ', 100 * double_error / total_hits, '%')
         print('\n', flush=True)
-        draw(gs, scale=0.5)
+        draw(gs, scale=0.5, browser_window=True)
 
 
 
@@ -230,7 +230,7 @@ class TestCombo(unittest.TestCase):
         print('Reflection errors: ', ref_error, 'of ', total_hits, 'ie. ', 100 * ref_error / total_hits, '%')
         print('Double errors: ', double_error, 'of ', total_hits, 'ie. ', 100 * double_error / total_hits, '%')
         print('\n', flush=True)
-        draw(gs, scale=0.5)
+        draw(gs, scale=0.5, browser_window=True)
 
 
 

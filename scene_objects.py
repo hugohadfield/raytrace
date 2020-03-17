@@ -6,6 +6,7 @@ from clifford.tools.g3c.GAOnline import *
 from meshing import *
 from pyganja import *
 from math_utils import *
+from derivatives import *
 
 import matplotlib.pyplot as plt
 
@@ -142,136 +143,6 @@ def alt_interp_objects_root(C1, C2, alpha):
     Interpolates C1 and C2 with alpha, note alpha is 1-alpha compared with cliford.tools.g3c
     """
     return layout.MultiVector(value=val_interp_objects_root(C1.value, C2.value, alpha))
-
-
-def sqsq(sigma):
-    """
-    The function [[Sigma]]
-    """
-    return np.sqrt(sigma[0]**2 - (sigma(4)**2)[0])
-
-
-def differential_sqsq(sigma, dsda):
-    """
-    The differential of [[Sigma]]
-    """
-    left = dsda[0]*sigma[0] + sigma[0]*dsda[0]
-    right = (dsda(4)*sigma(4) + sigma(4)*dsda(4))[0]
-    return (left - right)/(2*sqsq(sigma))
-
-
-def differential_root_sigma(sigma, dsda):
-    """
-    The differential of square root of sigma
-    """
-    dsqsq = differential_sqsq(sigma, dsda)
-    sqsqsig = sqsq(sigma)
-    left = ( dsda + dsqsq ) * ( 1.0 / ( np.sqrt(2)*np.sqrt( sigma[0] + sqsqsig ) ) )
-    rightdiff = ((-1.0/(2*np.sqrt(2)))*( sigma[0] + sqsqsig[0] )**(-3.0/2))*( dsda[0] + dsqsq )
-    right = ( sigma + sqsqsig ) * ( 1.0 / ( np.sqrt(2)*np.sqrt( sigma[0] + sqsqsig ) ) ) * rightdiff
-    total = left + right
-    return total
-
-
-
-# def differentiate_manifold_projection(alpha, X1, X2):
-#     # Raw interpolant and derivative
-#     Xdash = alpha*X1 + (1- alpha)*X2
-#     dXdashdalpha = X1 - X2
-
-#     sigma = -Xdash*~Xdash
-#     drootsigmadalpha = differential_root_sigma(sigma, dsda)
-
-
-@numba.njit
-def val_differentiateLinearCircle(alpha, C1_val, C2_val):
-    X_val = alpha*C1_val + (1-alpha) * C2_val
-
-    phiSquared = -gmt_func(X_val, adjoint_func(X_val))
-    phiSq0 = phiSquared[0]
-    phiSq4 = project_val(phiSquared,4)
-
-    dotz = C1_val - C2_val
-    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val))[0]
-    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val), 4)
-
-    tempsqrt = np.sqrt(phiSq0**2 -  gmt_func(phiSq4, phiSq4)[0])
-    dott = (dotphiSq0 + ((phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
-
-    t = phiSq0 + tempsqrt
-    sqrt2t = np.sqrt(2*t)
-
-    f = t/(sqrt2t)
-    dotf = (3*dott)/(2*sqrt2t)
-
-    g = phiSq4/(sqrt2t)
-    dotg = (4*t*dotphiSq4 - dott *phiSq4)/(2*t*sqrt2t)
-
-    k = (f*f - gmt_func(g,g)[0])
-
-    dotk = (2*f*dotf - gmt_func(g,dotg) - gmt_func(dotg, g))[0]
-
-    fminusg = -g
-    fminusg[0] += f
-    dotfminusdotg = -dotg
-    dotfminusdotg[0] += dotf
-    term1 = k*gmt_func(dotz, fminusg)
-    term2 = k*gmt_func(dotfminusdotg, X_val)
-    term3 = -dotk*gmt_func(fminusg, X_val)
-    Calphadot = val_normalised(project_val(term1 + term2 + term3, 3))
-
-    return Calphadot
-
-
-@numba.njit
-def val_differentiateLinearPointPair(alpha, C1_val, C2_val):
-    X_val = alpha*C1_val + (1-alpha) * C2_val
-
-    phiSquared = -gmt_func(X_val, adjoint_func(X_val))
-    phiSq0 = phiSquared[0]
-    phiSq4 = project_val(phiSquared,4)
-
-    dotz = C1_val - C2_val
-    dotphiSq0 = 2*alpha*gmt_func(C1_val,C1_val)[0] - 2*(1-alpha)*gmt_func(C2_val,C2_val)[0] + (1-2*alpha)*(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val))[0]
-    dotphiSq4 = (1-2*alpha) * project_val(gmt_func(C1_val,C2_val)+gmt_func(C2_val,C1_val), 4)
-
-    tempsqrt = np.sqrt(phiSq0**2 -  gmt_func(phiSq4, phiSq4)[0])
-    dott = (dotphiSq0 + ((phiSq0*dotphiSq0) - gmt_func(phiSq4, dotphiSq4) -gmt_func(dotphiSq4, phiSq4))/tempsqrt)[0]
-
-    t = phiSq0 + tempsqrt
-    sqrt2t = np.sqrt(2*t)
-
-    f = t/(sqrt2t)
-    dotf = (3*dott)/(2*sqrt2t)
-
-    g = phiSq4/(sqrt2t)
-    dotg = (4*t*dotphiSq4 - dott *phiSq4)/(2*t*sqrt2t)
-
-    k = (f*f - gmt_func(g,g)[0])
-
-    dotk = (2*f*dotf - gmt_func(g,dotg) - gmt_func(dotg, g))[0]
-
-    fminusg = -g
-    fminusg[0] += f
-    dotfminusdotg = -dotg
-    dotfminusdotg[0] += dotf
-    term1 = k*gmt_func(dotz, fminusg)
-    term2 = k*gmt_func(dotfminusdotg, X_val)
-    term3 = -dotk*gmt_func(fminusg, X_val)
-    Calphadot = val_normalised(project_val(term1 + term2 + term3, 2))
-
-    return Calphadot
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -811,6 +682,7 @@ def test_obj_circles():
 
         threedvertexlist = [down(v).value[1:4] for v in vertex_list]
         write_obj_file("surfaces/test{:02d}.obj".format(i), threedvertexlist, face_list, threedns)
+
 
 
 if __name__ == '__main__':
