@@ -533,8 +533,8 @@ class CircleSurface(InterpSurface):
         """
         Meshes the surface
         """
-        vertex_list, face_list, alpha_list = mesh_circle_surface(self.first, self.second, n_points=n_points, n_alpha=n_alpha)
-        return vertex_list, face_list, alpha_list
+        vertex_list, face_list, texture_coords = mesh_circle_surface(self.first, self.second, n_points=n_points, n_alpha=n_alpha)
+        return vertex_list, face_list, texture_coords
 
     def vertex_normal_lines(self, ga_vertices, alpha_list):
         """
@@ -552,7 +552,7 @@ class CircleSurface(InterpSurface):
         """
         Meshes the surface and adds it to a GanjaScene
         """
-        ga_vertices, face_list, alpha_list = self.mesh(n_points=n_points, n_alpha=n_alpha)
+        ga_vertices, face_list, texture_coords = self.mesh(n_points=n_points, n_alpha=n_alpha)
         return get_facet_scene(ga_vertices, face_list)
 
 
@@ -666,8 +666,8 @@ class PointPairSurface(InterpSurface):
 
 
 def test_obj_circles():
-    n_alpha = 41
-    n_points = 41
+    n_alpha = 101
+    n_points = 71
 
     for i in range(100):
         print(i)
@@ -675,13 +675,15 @@ def test_obj_circles():
         C2 = random_circle()
 
         csurf = CircleSurface(C1, C2)
-        vertex_list, face_list, alpha_list = csurf.mesh(n_points=n_points, n_alpha=n_alpha)
+        vertex_list, face_list, texture_coords = csurf.mesh(n_points=n_points, n_alpha=n_alpha)
 
+        alpha_list = [tc[1] for tc in texture_coords]
         normal_lines = csurf.vertex_normal_lines(vertex_list, alpha_list)
         threedns = [-((n*I5)(e123)*I3).normal().value[1:4] for n in normal_lines]
 
         threedvertexlist = [down(v).value[1:4] for v in vertex_list]
-        write_obj_file("surfaces/test{:02d}.obj".format(i), threedvertexlist, face_list, threedns)
+        write_obj_file("surfaces/test{:02d}.obj".format(i), 
+            threedvertexlist, face_list, threedns, texture_coords, use_mtl=True)
 
 
 

@@ -6,19 +6,50 @@ from clifford.tools.g3c import *
 from pyganja import *
 
 
-def write_obj_file(filename, vertices, faces, vertex_normals=None):
+def write_obj_file(filename, vertices, faces, 
+                    vertex_normals=None, 
+                    texture_coords=None,
+                    use_mtl=False):
     """ Writes a .obj file """
     with open(filename, 'w') as fobj:
+        if use_mtl:
+            print("""
+mtllib tube.mtl
+
+g tube
+usemtl tube
+
+""", file=fobj)
+
         for v in vertices:
             print("v %f %f %f"%(v[0],v[1],v[2]), file=fobj)
+
+        if texture_coords is not None:
+            for tc in texture_coords:
+                print("vt %f %f 0.0"%(tc[0],tc[1]), file=fobj)
+
         if vertex_normals is not None:
             for vn in vertex_normals:
                 print("vn %f %f %f"%(vn[0],vn[1],vn[2]), file=fobj)
-            for f in faces:
-                print("f %d//%d %d//%d %d//%d"%(f[0]+1,f[0]+1,f[1]+1,f[1]+1,f[2]+1,f[2]+1), file=fobj)
+            if texture_coords is not None:
+                for f in faces:
+                    print("f %d/%d/%d %d/%d/%d %d/%d/%d"%(f[0]+1,f[0]+1,f[0]+1,
+                        f[1]+1,f[1]+1,f[1]+1,
+                        f[2]+1,f[2]+1,f[2]+1), file=fobj)
+            else:
+                for f in faces:
+                    print("f %d//%d %d//%d %d//%d"%(f[0]+1,f[0]+1,
+                        f[1]+1,f[1]+1,
+                        f[2]+1,f[2]+1), file=fobj)
         else:
-            for f in faces:
-                print("f %d %d %d"%(f[0]+1,f[1]+1,f[2]+1), file=fobj)
+            if texture_coords is not None:
+                for f in faces:
+                    print("f %d %d %d"%(f[0]+1,f[1]+1,f[2]+1), file=fobj)
+            else:
+                for f in faces:
+                    print("f %d/%d %d/%d %d/%d"%(f[0]+1,f[0]+1,
+                        f[1]+1,f[1]+1,
+                        f[2]+1,f[2]+1), file=fobj)
 
 
 def mesh_grid(nypoints, nxpoints, mask=None, loopx=False):
@@ -79,17 +110,24 @@ def get_facet_scene(ga_vertices, face_list):
 def vertex_circles(Clist, n_points):
     """
     Generates vertices on the circles
+    Generates texture coordinates assuming even spacing between Clist
     """
     C_old = normalised(up(e1)^up(e2)^up(-e1))
     R = generate_rotation_rotor(2*np.pi/n_points, e1, e2)
     pc = [normalise_n_minus_1((R**n)*up(e1)*~(R**n)) for n in range(n_points+1)]
+    narray = np.array((range(n_points+1)))
+    uarray = narray/len(narray)
+    varray = np.array(range(len(Clist)))/len(Clist)
     vertex_list = []
-    for C in Clist:
+    texture_coords = []
+    for j, C in enumerate(Clist):
         Rtrans = TRS_between_rounds(C_old, C)
         C_old = C
         pc = [normalise_n_minus_1((Rtrans*p*~Rtrans)(1)) for p in pc]
         vertex_list += pc
-    return vertex_list
+        for i in range(len(uarray)):
+            texture_coords.append( (uarray[i], varray[j]) )
+    return vertex_list, texture_coords
 
 
 def mesh_circle_surface(C1, C2, n_points=21, n_alpha=21):
@@ -98,9 +136,9 @@ def mesh_circle_surface(C1, C2, n_points=21, n_alpha=21):
     """
     alpha_list = np.linspace(0,1,n_alpha)
     Clist = [interp_objects_root(C1,C2,alp) for alp in alpha_list]
-    vertex_list = vertex_circles(Clist, n_points)
+    vertex_list, texture_coords = vertex_circles(Clist, n_points)
     face_list = mesh_grid(n_alpha, n_points, mask=None, loopx=True)
-    return vertex_list, face_list, alpha_list
+    return vertex_list, face_list, texture_coords
 
 
 def test_mesh_circles():
@@ -112,7 +150,7 @@ def test_mesh_circles():
     C1 = random_circle()
     C2 = random_circle()
 
-    vertex_list, face_list, alpha_list = mesh_circle_surface(C1, C2, n_points=n_points, n_alpha=n_alpha)
+    vertex_list, face_list, texture_coords = mesh_circle_surface(C1, C2, n_points=n_points, n_alpha=n_alpha)
 
     gs = get_facet_scene(vertex_list, face_list)
     gs.add_objects(vertex_list, static=True)
