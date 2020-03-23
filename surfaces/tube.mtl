@@ -1,0 +1,12 @@
+
+newmtl tube
+	Ns 32
+	d 1
+	Tr 0
+	Tf 1 1 1
+	illum 2
+	Ka 0.8000 0.8000 0.8000
+	Kd 0.8000 0.8000 0.8000
+	Ks 0.3500 0.3500 0.3500
+    map_Ka tube.png
+    map_Kd tube.png
