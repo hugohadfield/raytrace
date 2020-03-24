@@ -156,18 +156,18 @@ def test_mesh_projected_KB_spline():
 
     # Generate the circle spline
     size = 0.1
-    t = 1.0*e1
-    nobjs = 6
+    t = 0.2*e1
+    nobjs = 20
     Cstart = (up(size*1.0*e1)^up(size*1.0*e2)^up(-size*1.0*e1)).normal()
     Tstart = 1 - 0.5*t*einf
-    D = generate_dilation_rotor(0.8)
+    D = generate_dilation_rotor(0.9)
     T = ((1 - 0.5*(0.1*e2)*einf)*generate_rotation_rotor(np.pi/6, e1, e3)*D).normal()
     control_list = [apply_rotor(Cstart, ((T**n)*Tstart)(0,2,4).normal())(3).normal() for n in range(nobjs)]
 
-    spline_objs, derivative_objects = projected_KB_spline(control_list)
+    spline_objs, derivative_objects = projected_KB_spline(control_list, nalpha=40)
 
     # Mesh the spline
-    n_points = 21
+    n_points = 41
     n_alpha = len(spline_objs)
     vertex_list, texture_coords = vertex_circles(spline_objs, n_points)
     face_list = mesh_grid(n_alpha, n_points, mask=None, loopx=True)
