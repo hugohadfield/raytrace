@@ -18,6 +18,17 @@ Here are a couple of the latest rendering from the code in the repo:
 <img src="https://github.com/hugohadfield/raytrace/blob/master/fig.png?raw=true" alt="drawing" width="100%"/>
 </figure>
 
+## Splines
+The code can also generate splines of various types through different objects. Here are some N'th order Bezier splines:
+Order 1          |  Order 2 |Order 3
+:-------------------------:|:-------------------------:|:-------------------------:
+![](https://github.com/hugohadfield/raytrace/blob/master/n1.png?raw=true)  |  ![](https://github.com/hugohadfield/raytrace/blob/master/n2.png?raw=true) |  ![](https://github.com/hugohadfield/raytrace/blob/master/n3.png?raw=true)
+
+It can also generate meshed and textured .obj files with correct vertex normals. Here is a KB spline through control circles with a checkerboard texture map applied:
+<figure>
+<img src="https://github.com/hugohadfield/raytrace/blob/master/horn.png?raw=true" alt="horn shape" width="100%"/>
+</figure>
+
 
 ## Usage:
 
