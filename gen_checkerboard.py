@@ -4,7 +4,7 @@ import imageio
 
 width = 2400
 height = 2400
-check_width = int(2400/32)
+check_width = int(2400/24)
 
 output = 255*np.ones((width,height), dtype=np.uint8)
 for x in range(width):
