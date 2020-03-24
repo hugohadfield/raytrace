@@ -1,9 +1,11 @@
 
 from clifford.tools.g3c import *
 from clifford.g3c import *
+from clifford.tools.g3c.rotor_parameterisation import interpolate_rotors
 from pyganja import *
 from meshing import *
 from derivatives import *
+from scipy.special import comb
 
 
 def reject_Cdot(C, Cdot):
@@ -191,9 +193,116 @@ def test_mesh_projected_KB_spline():
                     use_mtl=True)
 
 
+def bern(alpha, i, N):
+    """
+    Evaluates Bernstein basis polynomial at alpha
+    """
+    if i < 0 or i > N:
+        return 0.0
+    return comb(N, i)*alpha**i*(1-alpha)**(N-i)
+
+
+def diff_bern(alpha, i, N):
+    """
+    Evaluates derivative of the bernstein basis polynomial at alpha
+    """
+    return N*( bern(alpha, i-1, N-1) - bern(alpha, i, N-1) )
+
+
+def test_diff_bern():
+    alpha_list = np.linspace(0,1,100)
+    delta_alpha = 1E-6
+    bn = 0.0
+    last_bn = 0.0
+    for N in range(1, 10):
+        for i in range(N+1):
+            for k, alpha in enumerate(alpha_list):
+                bnp = bern(alpha+delta_alpha, i, N)
+                bnm = bern(alpha-delta_alpha, i, N)
+                if k > 0:
+                    dbern = (bnp - bnm)/(2*delta_alpha)
+                    dbern2 = diff_bern(alpha, i, N)
+                    np.testing.assert_allclose([dbern], [dbern2], 1E-3, 1E-6)
+
+
+def nth_order_bezier_curve(X_list, alpha):
+    """
+    Evaluates an N'th order bezier curve and its derivative at alpha
+    """
+    N = len(X_list) - 1
+    curve = 0.0
+    diff_curve = 0.0
+    for i in range(N+1):
+        curve += bern(alpha, i, N)*X_list[i]
+        diff_curve += diff_bern(alpha, i, N)*X_list[i]
+    return curve, diff_curve
+
+
+def test_nth_order_bezier():
+    import matplotlib.pyplot as plt
+    alpha_list = np.linspace(0,1,100)
+    delta_alpha = alpha_list[1]-alpha_list[0]
+    for nth_order in range(1, 2):
+        X_list = [np.random.randn(2) for i in range(nth_order+1)]
+        op = []
+        diff_op = []
+        for alpha in alpha_list:
+            curve, diff_curve = nth_order_bezier_curve(X_list, alpha)
+            op.append(curve)
+            diff_op.append(diff_curve)
+        test_grad = np.gradient(np.array(op), delta_alpha, axis=0)
+        # print(np.sum(np.abs(test_grad - np.array(diff_op))))
+
+        for x in zip(test_grad, diff_op):
+            print(x)
+
+        xs, ys = zip(*op)
+        plt.plot(xs, ys)
+        plt.plot(list(zip(*X_list))[0], list(zip(*X_list))[1], 'r')
+        plt.show()
+
+
+def generate_projected_bezier_curve(X_list, n_alpha=100):
+    """
+    Evaluates an N'th order projected multivector bezier curve 
+    and its derivative at alpha
+    """
+    th_order = len(X_list) - 1  
+    op = []
+    diff_op = []
+    for alpha in np.linspace(0,1,n_alpha):
+        curve, diff_curve = nth_order_bezier_curve(X_list, alpha)
+        diff_curve = differential_manifold_projection(curve, diff_curve)(3).normal()
+        curve = average_objects([curve])
+        op.append(curve)
+        diff_op.append(diff_curve)
+    return op, diff_op
+
+
+def test_projected_bezier_curve():
+    # Generate the circle curve
+    size = 0.1
+    t = 1.0*e1
+    D = generate_dilation_rotor(0.01)
+    X_list = [apply_rotor(random_circle(), D)(3).normal() for i in range(4)]
+
+    for nth_order in range(1, 4):
+        thisXlist = [X_list[0]] + X_list[1:nth_order] + [X_list[-1]]
+        op, diff_op = generate_projected_bezier_curve(thisXlist)
+
+        gs = GanjaScene()
+        gs.add_objects(op)
+        gs.add_objects(thisXlist, color=Color.RED)
+        gs.add_objects([up(0.5*e2)],label='N = ' + str(nth_order),color=Color.RED)
+        draw(gs, browser_window=True, scale=1.0)
+
+
 if __name__ == '__main__':
     # test_reject_Cdot()
     # test_derivative_hermite_spline()
     # test_projected_KB_spline()
-    test_mesh_projected_KB_spline()
+    # test_mesh_projected_KB_spline()
+    # test_diff_bern()
+    # test_nth_order_bezier()
+    test_projected_bezier_curve()
     pass
