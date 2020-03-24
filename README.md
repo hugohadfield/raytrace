@@ -19,7 +19,7 @@ Here are a couple of the latest rendering from the code in the repo:
 </figure>
 
 ## Splines
-The code can also generate splines of various types through different objects. Here are some N'th order Bezier splines:
+The code can also generate splines of various types through different objects. Here are some N'th order Bezier curves:
 Order 1          |  Order 2 |Order 3
 :-------------------------:|:-------------------------:|:-------------------------:
 ![](https://github.com/hugohadfield/raytrace/blob/master/n1.png?raw=true)  |  ![](https://github.com/hugohadfield/raytrace/blob/master/n2.png?raw=true) |  ![](https://github.com/hugohadfield/raytrace/blob/master/n3.png?raw=true)
