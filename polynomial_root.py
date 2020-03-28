@@ -208,6 +208,7 @@ def jitted_comp(c):
 
 @numba.njit
 def val_filter_roots_point_pair(potential_roots, X0_val, X1_val, L_val):
+    """ Filters the potential roots to ensure that the meet really is zero there... """
     filtered_roots = -np.ones_like(potential_roots)
     i = 0
     mv_array = np.zeros((32, 2))
