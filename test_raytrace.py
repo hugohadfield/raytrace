@@ -61,7 +61,13 @@ class RayTraceScenes(unittest.TestCase):
         print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
         print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
-    def test_render_random_point_pair_scene(self):
+    def test_render_random_point_pair_scene_iterative(self):
+        self._test_render_random_point_pair_scene(use_poly=False)
+
+    def test_render_random_point_pair_scene_poly(self):
+        self._test_render_random_point_pair_scene(use_poly=True)
+
+    def _test_render_random_point_pair_scene(self, use_poly):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
                            'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
 
@@ -91,6 +97,8 @@ class RayTraceScenes(unittest.TestCase):
         object_list.append(
             PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
         )
+        if use_poly:
+            object_list[0].set_intersection_func_to_polynomial()
 
         scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
 
@@ -109,14 +117,23 @@ class RayTraceScenes(unittest.TestCase):
         imrendered = new_scene.render()
 
         # Save and show the image
-        plt.imsave('PointPair.png', imrendered.astype(np.uint8))
+        if use_poly:
+            plt.imsave('PointPairPoly.png', imrendered.astype(np.uint8))
+        else:
+            plt.imsave('PointPair.png', imrendered.astype(np.uint8))
         plt.imshow(imrendered)
         plt.show()
 
         print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
         print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
 
-    def test_render_standard_point_pair_scene(self):
+    def test_render_standard_point_pair_scene_iterative(self):
+        self._test_render_standard_point_pair_scene(use_poly=False)
+
+    def test_render_standard_point_pair_scene_poly(self):
+        self._test_render_standard_point_pair_scene(use_poly=True)
+
+    def _test_render_standard_point_pair_scene(self, use_poly):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
                            'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
         k = 1.0
@@ -130,8 +147,8 @@ class RayTraceScenes(unittest.TestCase):
 
         # Construct the camera
         camera_lookat = e1
-        image_height = 480
-        image_width = 600
+        image_height = 100
+        image_width = 200
         f = 1.
         centre3d = - 10. * e2 + 1. * e1
         scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
@@ -143,6 +160,8 @@ class RayTraceScenes(unittest.TestCase):
         object_list.append(
             PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
         )
+        if use_poly:
+            object_list[0].set_intersection_func_to_polynomial()
 
         # Construct the scene
         new_scene = RayScene(camera=scene_camera,
@@ -152,15 +171,18 @@ class RayTraceScenes(unittest.TestCase):
                              shading_options=shading_options)
 
         # Have a look at what we are rendering
-        new_scene.draw()
+        # new_scene.draw()
 
         # Render it all
         imrendered = new_scene.render()
 
         # Save and show the image
-        plt.imsave('PointPairStandard.png', imrendered.astype(np.uint8))
-        plt.imshow(imrendered)
-        plt.show()
+        if use_poly:
+            plt.imsave('PointPairStandardPoly.png', imrendered.astype(np.uint8))
+        else:
+            plt.imsave('PointPairStandard.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered)
+        # plt.show()
 
         print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
         print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
