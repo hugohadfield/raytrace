@@ -7,6 +7,8 @@ from meshing import *
 from pyganja import *
 from math_utils import *
 from derivatives import *
+from polynomial_root import potential_roots_circles, jitted_potential_roots_point_pairs
+
 
 import matplotlib.pyplot as plt
 
@@ -366,7 +368,7 @@ class InterpSurface:
                 """
                 Evaluate the probes and get (up to 4) crossing points
                 """
-                alphas = -np.ones(4)
+                alphas = -np.ones(6)
                 if bfunc(Lval):
                     res = pfunc(Lval)
                     n = 0
@@ -379,7 +381,7 @@ class InterpSurface:
                             else:
                                 alphas[n] = get_root(palphas[i - 1:i + 2], res[i - 1:i + 2])
                             n = n + 1
-                            if n > 3:
+                            if n > 5:
                                 break
                         m1 = m2
                 return alphas
@@ -442,6 +444,11 @@ class InterpSurface:
 class CircleSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
+    def set_intersection_func_to_polynomial(self):
+        def intersect_line(Lval):
+            return potential_roots_circles(self.first, self.second, layout.MultiVector(value=Lval))
+        self._intersection_func = intersect_line
 
     @property
     def probe_func(self):
@@ -560,6 +567,12 @@ class PointPairSurface(InterpSurface):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._diff_probes = None
+
+    def set_intersection_func_to_polynomial(self):
+        def intersect_line(Lval):
+            potential_roots = jitted_potential_roots_point_pairs(self.first, self.second, layout.MultiVector(value=Lval))
+            return potential_roots
+        self._intersection_func = intersect_line
 
     @property
     def diff_probes(self):

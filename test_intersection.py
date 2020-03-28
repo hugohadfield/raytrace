@@ -3,14 +3,14 @@ from clifftrace import *
 from clifford.g3c import *
 from clifford.tools.g3c import *
 import matplotlib.pyplot as plt
-import scipy.interpolate
+import pytest
 
 import unittest
 
 from scene_objects import *
 
 
-class TestCombo(unittest.TestCase):
+class TestKnownCases(unittest.TestCase):
 
     def test_circle_surface_point_hit(self):
         """
@@ -118,11 +118,15 @@ class TestCombo(unittest.TestCase):
         print('Reflection errors: ', ref_error, 'of ', total_hits, 'ie. ', 100 * ref_error / total_hits, '%')
         print('Double errors: ', double_error, 'of ', total_hits, 'ie. ', 100 * double_error / total_hits, '%')
         print('\n', flush=True)
-        draw(gs, scale=0.5, browser_window=True)
+        # draw(gs, scale=0.5, browser_window=True)
 
+    def test_point_pair_surface_point_hit_iterative(self):
+        self._test_point_pair_surface_point_hit(use_poly=False)
 
+    def test_point_pair_surface_point_hit_poly(self):
+        self._test_point_pair_surface_point_hit(use_poly=True)
 
-    def test_point_pair_surface_point_hit(self):
+    def _test_point_pair_surface_point_hit(self, use_poly):
         """
         Make a load of rays and intersect them
         """
@@ -149,6 +153,8 @@ class TestCombo(unittest.TestCase):
         C2 = (up(-e1 + e2) ^ up(-e1 - e2) ).normal()
 
         surf = PointPairSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
+        if use_poly:
+            surf.set_intersection_func_to_polynomial()
         object_list = [surf]
 
         circle = Circle(e1 + e2, e1 - e2,-e1 + e2, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
@@ -230,8 +236,7 @@ class TestCombo(unittest.TestCase):
         print('Reflection errors: ', ref_error, 'of ', total_hits, 'ie. ', 100 * ref_error / total_hits, '%')
         print('Double errors: ', double_error, 'of ', total_hits, 'ie. ', 100 * double_error / total_hits, '%')
         print('\n', flush=True)
-        draw(gs, scale=0.5, browser_window=True)
-
+        # draw(gs, scale=0.5, browser_window=True)
 
 
 if __name__ == '__main__':
