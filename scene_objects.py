@@ -172,7 +172,7 @@ class Sphere:
         """
         Given there is an intersection this reflects the line off the object
         """
-        return -1. * reflect_in_sphere(L, self.object, pX)
+        return 1. * reflect_in_sphere(L, self.object, pX)
 
     def as_scene(self):
         gs = GanjaScene()
