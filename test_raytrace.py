@@ -2,7 +2,7 @@ import unittest
 from clifftrace import *
 
 
-class MyTestCase(unittest.TestCase):
+class RayTraceScenes(unittest.TestCase):
 
     def test_render_random_circle_scene(self):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
