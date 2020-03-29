@@ -678,7 +678,7 @@ class PointPairSurface(InterpSurface):
             return False
 
 
-def test_obj_circles():
+def generate_obj_circles():
     n_alpha = 101
     n_points = 71
 
@@ -701,4 +701,4 @@ def test_obj_circles():
 
 
 if __name__ == '__main__':
-    test_obj_circles()
+    generate_obj_circles()
