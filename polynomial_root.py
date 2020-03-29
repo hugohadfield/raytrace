@@ -159,17 +159,17 @@ def _val_mvconv(a, b):
     return y
 
 
-def mvconv(a: cf.MVArray, b: cf.MVArray):
+def mvconv(a: cf.MVArray, b: cf.MVArray) -> cf.MVArray:
     """
     Performs the 1D discrete convolution of two 1D sequences of
     multivectors a and b
     returns y of shape (a.shape[0] + b.shape[0] - 1, 32)
     """
     valconv = _val_mvconv(a.value, b.value)
-    return cf.MVArray([layout.MultiVector(valconv[i, :], copy=False) for i in range(valconv.shape[0])])
+    return cf.MVArray([layout.MultiVector(valconv[i, :]) for i in range(valconv.shape[0])])
 
 
-def potential_roots_point_pairs(X0, X1, L):
+def potential_roots_point_pairs(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiVector) -> np.ndarray:
     """
     Point pairs have a maximum of 6 roots
     """
@@ -184,9 +184,9 @@ def potential_roots_point_pairs(X0, X1, L):
 
     # Take only the real roots between 0 and 1
     real_valued = root_list.real[abs(root_list.imag)<1e-5]
-    potential_roots = [r for r in real_valued if r >= 0 and r <= 1]
-
-    return potential_roots
+    potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
+    filtered_roots = val_filter_roots_point_pair(potential_roots, X0.value, X1.value, L.value)
+    return filtered_roots
 
 
 @numba.njit
@@ -276,7 +276,82 @@ def gen_full_poly_circles(Xdash: MultiVectorPolynomial, L: cf.MultiVector) -> np
     return (left - right).scalar_poly
 
 
-def potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiVector) -> list:
+
+@numba.njit
+def val_poly_meet_L(poly, L):
+    output = np.zeros_like(poly)
+    for i in range(poly.shape[0]):
+        output[i, :] = meet_val(L, poly[i, :])
+    return output
+
+
+def val_jitted_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
+    """
+    sigma = poly_sigma(Xdash)
+
+    sig0 = sigma.grade(0)
+    sig4 = sigma.grade(4)
+
+    Lvsig0Xdash = poly_meet_L(sig0*(Xdash), L)
+    lvsig4Xdash = poly_meet_L(sig4*(Xdash), L)
+    lvXdash = poly_meet_L(Xdash, L)
+
+    left = ((Lvsig0Xdash - lvsig4Xdash) ** 2 + poly_norm_sigma_sqrd(sigma) * lvXdash ** 2) ** 2
+
+    right = poly_norm_sigma_sqrd(sigma) * (
+                (Lvsig0Xdash - lvsig4Xdash) * lvXdash + lvXdash * (Lvsig0Xdash - lvsig4Xdash)) ** 2
+
+    return (left - right).scalar_poly
+    """
+    val_sigma = _val_mvconv(Xdash, Xdash)
+    sig4 = val_sigma @ mask4
+    if np.sum(np.abs(sig4)) < 1E-8:  # Degenerate case, the pps are on a circle
+        final_poly = np.zeros(Xdash.shape[0])
+        for i in range(Xdash.shape[0]):
+            mtres = meet_val(L, Xdash[i, :])
+            final_poly[i] = gmt_func(mtres, mtres)[0]
+        return final_poly
+    sig0 = val_sigma @ mask0
+    Lvsig0Xdash = val_poly_meet_L(_val_mvconv(sig0, Xdash), L)
+    Lvsig4Xdash = val_poly_meet_L(_val_mvconv(sig4, Xdash), L)
+    lvXdash = val_poly_meet_L(Xdash, L)
+    norm_sig_sqrd = _val_mvconv(sig0, sig0) - _val_mvconv(sig4, sig4)
+    lv0sub4 = Lvsig0Xdash - Lvsig4Xdash
+
+    left_rt = _val_mvconv(lv0sub4, lv0sub4) + _val_mvconv(norm_sig_sqrd, _val_mvconv(lvXdash, lvXdash))
+
+    right_right = _val_mvconv(lv0sub4, lvXdash) + _val_mvconv(lvXdash, lv0sub4)
+
+    final = _val_mvconv(left_rt, left_rt)[:, 0] - _val_mvconv(norm_sig_sqrd, _val_mvconv(right_right, right_right))[:, 0]
+    return final
+
+
+def jitted_gen_full_poly_circles(Xdash: cf.MVArray, L: cf.MVArray) -> npp.Polynomial:
+    return npp.Polynomial(val_jitted_gen_full_poly_circles(Xdash.value, L.value))
+
+
+@numba.njit
+def val_filter_roots_circle(potential_roots: np.ndarray, X0_val: np.ndarray, X1_val: np.ndarray, L_val: np.ndarray) -> np.ndarray:
+    """ Filters the potential roots to ensure that the meet really is zero there... """
+    filtered_roots = -np.ones_like(potential_roots)
+    i = 0
+    mv_array = np.zeros((32, 2))
+    mv_array[:, 0] = X0_val
+    mv_array[:, 1] = X1_val
+    alpha_array = np.zeros(2)
+    for alpha in potential_roots:
+        alpha_array[0] = 1.0-alpha
+        alpha_array[1] = alpha
+        avobj = neg_twiddle_root_val((mv_array @ alpha_array))[0, :]
+        meet_res = meet_val(avobj, L_val)
+        meetsqrd = gmt_func(meet_res, meet_res)[0]
+        if np.abs(meetsqrd) < 1E-6:
+            filtered_roots[i] = alpha
+            i = i + 1
+    return filtered_roots
+
+
+def potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiVector) -> np.ndarray:
     """
     Interpolated circles form of polynomial of order 12
     """
@@ -286,6 +361,7 @@ def potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiV
     root_list = final_poly.roots()
     # Take only the real roots between 0 and 1
     real_valued = root_list.real[abs(root_list.imag)<1e-5]
-    potential_roots = [r for r in real_valued if r >= 0 and r <= 1]
-    return potential_roots
+    potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
+    filtered_roots = val_filter_roots_circle(potential_roots, X0.value, X1.value, L.value)
+    return filtered_roots
 

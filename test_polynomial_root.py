@@ -308,6 +308,36 @@ class TestCircle(unittest.TestCase):
         print('Full production ms per eval: ', 1000*(end_time - start_time)/nrepeats)
 
 
+    def test_jitted_gen_full_poly_circles(self):
+
+        for i in range(1000):
+            X0 = random_point_pair()
+            X1 = random_point_pair()
+            S = average_objects([X1, X0], [0.2, (1 - 0.2)])
+            L = ((S * einf * S) ^ up(0.0) ^ einf).normal()
+
+            coef_array = cf.MVArray([X1, X0 - X1])
+            polyXdash = MultiVectorPolynomial(coef_array)
+            final_poly = gen_full_poly_circles(polyXdash, L)
+
+            final_poly_jit = jitted_gen_full_poly_circles(coef_array, L)
+            np.testing.assert_allclose(final_poly.coef, final_poly_jit.coef)
+
+        nrepeats = 100
+
+        start_time = time.time()
+        for i in range(nrepeats):
+            gen_full_poly_circles(polyXdash, L)
+        end_time = time.time()
+        print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
+
+        start_time = time.time()
+        for i in range(nrepeats):
+            jitted_gen_full_poly_circles(coef_array, L)
+        end_time = time.time()
+        print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
+
+
 
 if __name__ == '__main__':
     unittest.main()
