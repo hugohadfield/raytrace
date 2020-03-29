@@ -222,7 +222,7 @@ class RayScene:
         return img
 
 
-def benchmark():
+def benchmark(use_poly):
     shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
                        'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
     k = 1.0
@@ -259,6 +259,8 @@ def benchmark():
     object_list.append(
         CircleSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
     )
+    if use_poly:
+        object_list[-1].set_intersection_func_to_polynomial()
 
     # Construct the scene
     new_scene = RayScene(camera=scene_camera,
@@ -280,5 +282,5 @@ def benchmark():
 
 
 if __name__ == "__main__":
-    for i in range(1):
-        benchmark()
+    for i in range(2):
+        benchmark(use_poly=False)

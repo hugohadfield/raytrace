@@ -7,7 +7,7 @@ from meshing import *
 from pyganja import *
 from math_utils import *
 from derivatives import *
-from polynomial_root import jitted_potential_roots_circles, jitted_potential_roots_point_pairs
+from polynomial_root import val_jitted_potential_roots_circles, val_jitted_potential_roots_point_pairs
 
 
 import matplotlib.pyplot as plt
@@ -447,7 +447,7 @@ class CircleSurface(InterpSurface):
 
     def set_intersection_func_to_polynomial(self):
         def intersect_line(Lval):
-            return jitted_potential_roots_circles(self.first, self.second, layout.MultiVector(value=Lval))
+            return val_jitted_potential_roots_circles(self.first.value, self.second.value, Lval)
         self._intersection_func = intersect_line
 
     @property
@@ -570,7 +570,7 @@ class PointPairSurface(InterpSurface):
 
     def set_intersection_func_to_polynomial(self):
         def intersect_line(Lval):
-            potential_roots = jitted_potential_roots_point_pairs(self.first, self.second, layout.MultiVector(value=Lval))
+            potential_roots = val_jitted_potential_roots_point_pairs(self.first.value, self.second.value, Lval)
             return potential_roots
         self._intersection_func = intersect_line
 
