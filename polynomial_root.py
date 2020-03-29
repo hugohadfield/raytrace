@@ -305,12 +305,11 @@ def _val_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
     """
     val_sigma = _val_mvconv(Xdash, Xdash)
     sig4 = val_sigma @ mask4
-    if np.sum(np.abs(sig4)) < 1E-8:  # Degenerate case, the pps are on a circle
-        final_poly = np.zeros(Xdash.shape[0])
+    if np.sum(np.abs(sig4)) < 1E-8:  # Degenerate case, the circles are on a sphere
+        final_poly = np.zeros_like(Xdash)
         for i in range(Xdash.shape[0]):
-            mtres = meet_val(L, Xdash[i, :])
-            final_poly[i] = gmt_func(mtres, mtres)[0]
-        return final_poly
+            final_poly[i, :] = meet_val(L, Xdash[i, :])
+        return _val_mvconv(final_poly, final_poly)[:, 0]
     sig0 = val_sigma @ mask0
     Lvsig0Xdash = val_poly_meet_L(_val_mvconv(sig0, Xdash), L)
     Lvsig4Xdash = val_poly_meet_L(_val_mvconv(sig4, Xdash), L)

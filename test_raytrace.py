@@ -4,7 +4,13 @@ from clifftrace import *
 
 class RayTraceScenes(unittest.TestCase):
 
-    def test_render_random_circle_scene(self):
+    def test_render_random_circle_scene_iterative(self):
+        self._test_render_random_circle_scene(use_poly=False)
+
+    def test_render_random_circle_scene_poly(self):
+        self._test_render_random_circle_scene(use_poly=True)
+
+    def _test_render_random_circle_scene(self, use_poly):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
                            'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
 
@@ -34,6 +40,8 @@ class RayTraceScenes(unittest.TestCase):
         object_list.append(
             CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
         )
+        if use_poly:
+            object_list[-1].set_intersection_func_to_polynomial()
 
         scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
 
@@ -147,8 +155,8 @@ class RayTraceScenes(unittest.TestCase):
 
         # Construct the camera
         camera_lookat = e1
-        image_height = 100
-        image_width = 200
+        image_height = 150
+        image_width = 300
         f = 1.
         centre3d = - 10. * e2 + 1. * e1
         scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
