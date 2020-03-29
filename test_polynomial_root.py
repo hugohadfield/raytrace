@@ -282,7 +282,7 @@ class TestCircle(unittest.TestCase):
         nrepeats = 200
 
         print(potential_roots_circles(X0,X1,L))
-        # print(jitted_potential_roots_circle(X0,X1,L))
+        print(jitted_potential_roots_circles(X0,X1,L))
         surf = CircleSurface(X0, X1)
         print(surf.intersection_func(L.value))
 
@@ -293,12 +293,12 @@ class TestCircle(unittest.TestCase):
         end_time = time.time()
         print('Poly ms per eval: ', 1000*(end_time - start_time)/nrepeats)
 
-        # # Polynomial method jitted version
-        # start_time = time.time()
-        # for i in range(nrepeats):
-        #     jitted_potential_roots_circles(X0,X1,L)
-        # end_time = time.time()
-        # print('Jitted poly ms per eval: ', 1000*(end_time - start_time)/nrepeats)
+        # Polynomial method jitted version
+        start_time = time.time()
+        for i in range(nrepeats):
+            jitted_potential_roots_circles(X0,X1,L)
+        end_time = time.time()
+        print('Jitted poly ms per eval: ', 1000*(end_time - start_time)/nrepeats)
 
         # The actual form in use
         start_time = time.time()

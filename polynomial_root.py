@@ -185,7 +185,7 @@ def potential_roots_point_pairs(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.Mu
     # Take only the real roots between 0 and 1
     real_valued = root_list.real[abs(root_list.imag)<1e-5]
     potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
-    filtered_roots = val_filter_roots_point_pair(potential_roots, X0.value, X1.value, L.value)
+    filtered_roots = val_filter_roots_point_pairs(potential_roots, X0.value, X1.value, L.value)
     return filtered_roots
 
 
@@ -207,7 +207,7 @@ def jitted_comp(c):
 
 
 @numba.njit
-def val_filter_roots_point_pair(potential_roots, X0_val, X1_val, L_val):
+def val_filter_roots_point_pairs(potential_roots, X0_val, X1_val, L_val):
     """ Filters the potential roots to ensure that the meet really is zero there... """
     filtered_roots = -np.ones_like(potential_roots)
     i = 0
@@ -247,7 +247,7 @@ def val_jitted_potential_roots_point_pairs(X0_val, X1_val, L_val):
     # Take only the real roots between 0 and 1
     real_valued = np.real(root_list)[np.abs(np.imag(root_list)) < 1e-5]
     potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
-    filtered_roots = val_filter_roots_point_pair(potential_roots, X0_val, X1_val, L_val)
+    filtered_roots = val_filter_roots_point_pairs(potential_roots, X0_val, X1_val, L_val)
     return filtered_roots
 
 
@@ -276,7 +276,6 @@ def gen_full_poly_circles(Xdash: MultiVectorPolynomial, L: cf.MultiVector) -> np
     return (left - right).scalar_poly
 
 
-
 @numba.njit
 def val_poly_meet_L(poly, L):
     output = np.zeros_like(poly)
@@ -285,7 +284,8 @@ def val_poly_meet_L(poly, L):
     return output
 
 
-def val_jitted_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
+@numba.njit
+def _val_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
     """
     sigma = poly_sigma(Xdash)
 
@@ -327,11 +327,11 @@ def val_jitted_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.nda
 
 
 def jitted_gen_full_poly_circles(Xdash: cf.MVArray, L: cf.MVArray) -> npp.Polynomial:
-    return npp.Polynomial(val_jitted_gen_full_poly_circles(Xdash.value, L.value))
+    return npp.Polynomial(_val_gen_full_poly_circles(Xdash.value, L.value))
 
 
 @numba.njit
-def val_filter_roots_circle(potential_roots: np.ndarray, X0_val: np.ndarray, X1_val: np.ndarray, L_val: np.ndarray) -> np.ndarray:
+def val_filter_roots_circles(potential_roots: np.ndarray, X0_val: np.ndarray, X1_val: np.ndarray, L_val: np.ndarray) -> np.ndarray:
     """ Filters the potential roots to ensure that the meet really is zero there... """
     filtered_roots = -np.ones_like(potential_roots)
     i = 0
@@ -362,6 +362,37 @@ def potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiV
     # Take only the real roots between 0 and 1
     real_valued = root_list.real[abs(root_list.imag)<1e-5]
     potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
-    filtered_roots = val_filter_roots_circle(potential_roots, X0.value, X1.value, L.value)
+    filtered_roots = val_filter_roots_circles(potential_roots, X0.value, X1.value, L.value)
     return filtered_roots
+
+
+def val_jitted_potential_roots_circles(X0_val, X1_val, L_val):
+    """
+    Generates the potential roots of the intersection polynomial in the range 0 to 1
+    for the linear interpolation of circles X0 and X1 intersected with line L
+
+    This version operates on value arrays for speed and calls jitted functions
+    internally.
+
+    NOTE: DESPITE THE NAME THIS FUNCTION IS PURPOSEFULLY NOT JITTED IN ITS ENTIRITY!
+    Jitting the entire function did not appear to produce any speed up and simply
+    caused problems with the eigvals function in the polynomial solving.
+    """
+    coef_array = np.zeros((2, 32))
+    coef_array[0, :] = X0_val
+    coef_array[1, :] = (X1_val - X0_val)
+    final_poly = _val_gen_full_poly_circles(coef_array, L_val)
+    comp = jitted_comp(final_poly)
+    root_list = np.linalg.eigvals(comp)
+
+    # Take only the real roots between 0 and 1
+    real_valued = np.real(root_list)[np.abs(np.imag(root_list)) < 1e-5]
+    potential_roots = real_valued[(real_valued >= 0)&(real_valued <= 1)]
+    filtered_roots = val_filter_roots_circles(potential_roots, X0_val, X1_val, L_val)
+    return filtered_roots
+
+
+def jitted_potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiVector) -> np.ndarray:
+    """ Calls val_jitted_potential_roots_circles """
+    return val_jitted_potential_roots_circles(X0.value, X1.value, L.value)
 

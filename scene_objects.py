@@ -7,7 +7,7 @@ from meshing import *
 from pyganja import *
 from math_utils import *
 from derivatives import *
-from polynomial_root import potential_roots_circles, jitted_potential_roots_point_pairs
+from polynomial_root import jitted_potential_roots_circles, jitted_potential_roots_point_pairs
 
 
 import matplotlib.pyplot as plt
@@ -366,7 +366,7 @@ class InterpSurface:
             @numba.njit
             def intersect_line(Lval):
                 """
-                Evaluate the probes and get (up to 4) crossing points
+                Evaluate the probes and get (up to 6) crossing points
                 """
                 alphas = -np.ones(6)
                 if bfunc(Lval):
@@ -447,7 +447,7 @@ class CircleSurface(InterpSurface):
 
     def set_intersection_func_to_polynomial(self):
         def intersect_line(Lval):
-            return potential_roots_circles(self.first, self.second, layout.MultiVector(value=Lval))
+            return jitted_potential_roots_circles(self.first, self.second, layout.MultiVector(value=Lval))
         self._intersection_func = intersect_line
 
     @property

@@ -12,7 +12,13 @@ from scene_objects import *
 
 class TestKnownCases(unittest.TestCase):
 
-    def test_circle_surface_point_hit(self):
+    def test_circle_surface_point_hit_iterative(self):
+        self._test_circle_surface_point_hit(use_poly=False)
+
+    def test_circle_surface_point_hit_poly(self):
+        self._test_circle_surface_point_hit(use_poly=True)
+
+    def _test_circle_surface_point_hit(self, use_poly):
         """
         Make a load of rays and intersect them
         """
@@ -40,6 +46,8 @@ class TestKnownCases(unittest.TestCase):
         S = unsign_sphere(C1.join(C2)(4)).normal()
 
         surf = CircleSurface(C2, C1, np.array([1., 0., 0.]), k * 1., 100., k * .5, k * 1., k * 0.3)
+        if use_poly:
+            surf.set_intersection_func_to_polynomial()
         object_list = [surf]
 
         # Construct the scene
