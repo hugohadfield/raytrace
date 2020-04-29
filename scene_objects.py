@@ -280,7 +280,7 @@ class Circle:
 
 class InterpSurface:
     def __init__(self, C1, C2, colour=[0,0,0], specular=0, spec_k=0, 
-                 amb=0, diffuse=0, reflection=0):
+                 amb=0, diffuse=0, reflection=0, nprobe_alphas=1000):
         self.first = C1
         self.second = C2
         self.colour = colour
@@ -294,7 +294,7 @@ class InterpSurface:
         self._probe_func = None
         self._intersection_func = None
         self._bounding_sphere = None
-        self.probe_alphas = np.linspace(0, 1, 1000)
+        self.probe_alphas = np.linspace(0, 1, nprobe_alphas)
 
         self.grade = grade_obj(C1)
 

@@ -2,198 +2,282 @@ import unittest
 from clifftrace import *
 
 
-class RayTraceScenes(unittest.TestCase):
+def _test_render_scene(object_list):
+    shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
+                       'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
+
+    background_color = np.zeros(3)  # [66./520., 185./510., 244./510.]
+
+    # Light position and color.
+    lights_list = []
+    L = -30. * e1 + 5. * e3 - 30. * e2
+    colour_light = np.ones(3)
+    lights_list.append(Light(L, colour_light))
+    L = 30. * e1 + 5. * e3 - 30. * e2
+    lights_list.append(Light(L, colour_light))
+
+    # Construct the camera
+    camera_lookat = e1 + 5.5 * e3
+    image_height = 160
+    image_width = 200
+    f = 1.
+    centre3d = -25. * e2 + 1. * e1 + 5.5 * e3
+
+    scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
+
+    # Construct the scene
+    new_scene = RayScene(camera=scene_camera,
+                         light_list=lights_list,
+                         object_list=object_list,
+                         background_color=background_color,
+                         max_bounces=5,
+                         shading_options=shading_options)
+
+    # Construct a GanjaScene from the scene
+    gs = new_scene.as_scene()
+    try:
+        # Try and mesh the first object
+        gs += object_list[0].as_mesh_scene()
+    except:
+        pass
+
+    # Render it all
+    imrendered = new_scene.render()
+
+    return gs, imrendered
+
+
+class CircleScenes(unittest.TestCase):
 
     def test_render_random_circle_scene_iterative(self):
-        self._test_render_random_circle_scene(use_poly=False)
-
-    def test_render_random_circle_scene_poly(self):
-        self._test_render_random_circle_scene(use_poly=True)
-
-    def _test_render_random_circle_scene(self, use_poly):
-        shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
-                           'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
-
         k = 1.  # Magic constant to scale everything by the same amount!
-        background_color = np.zeros(3)  # [66./520., 185./510., 244./510.]
-
-        # Light position and color.
-        lights_list = []
-        L = -30. * e1 + 5. * e3 - 30. * e2
-        colour_light = np.ones(3)
-        lights_list.append(Light(L, colour_light))
-        L = 30. * e1 + 5. * e3 - 30. * e2
-        lights_list.append(Light(L, colour_light))
-
-        # Construct the camera
-        camera_lookat = e1 + 5.5 * e3
-        image_height = 160
-        image_width = 200
-        f = 1.
-        centre3d = -25. * e2 + 1. * e1 + 5.5 * e3
-
         # Construct objects to render:
-        object_list = []
         D1 = generate_dilation_rotor(0.5)
         C1 = normalised((D1 * random_circle() * ~D1)(3))
         C2 = normalised((D1 * random_circle() * ~D1)(3))
-        object_list.append(
-            CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-        )
-        if use_poly:
-            object_list[-1].set_intersection_func_to_polynomial()
+        print(C1)
+        print(C2)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        object_list = [surf]
 
-        scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
-
-        # Construct the scene
-        new_scene = RayScene(camera=scene_camera,
-                             light_list=lights_list,
-                             object_list=object_list,
-                             background_color=background_color,
-                             max_bounces=5,
-                             shading_options=shading_options)
-
-        # Have a look at what we are rendering
-        gs = new_scene.as_scene()
-        gs += object_list[0].as_mesh_scene()
-        draw(gs, scale=0.1, browser_window=True)
-
-        # Render it all
-        imrendered = new_scene.render()
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
 
         # Save and show the image
-        plt.imsave('Circle.png', imrendered.astype(np.uint8))
-        plt.imshow(imrendered.astype(np.uint8))
-        plt.show()
-
-        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
-        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
-
-    def test_render_random_point_pair_scene_iterative(self):
-        self._test_render_random_point_pair_scene(use_poly=False)
-
-    def test_render_random_point_pair_scene_poly(self):
-        self._test_render_random_point_pair_scene(use_poly=True)
-
-    def _test_render_random_point_pair_scene(self, use_poly):
-        shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
-                           'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
-
-        k = 1.  # Magic constant to scale everything by the same amount!
-        background_color = np.zeros(3)  # [66./520., 185./510., 244./510.]
-
-        # Light position and color.
-        lights_list = []
-        L = -30. * e1 + 5. * e3 - 30. * e2
-        colour_light = np.ones(3)
-        lights_list.append(Light(L, colour_light))
-        L = 30. * e1 + 5. * e3 - 30. * e2
-        lights_list.append(Light(L, colour_light))
-
-        # Construct the camera
-        camera_lookat = e1 + 5.5 * e3
-        image_height = 80
-        image_width = 100
-        f = 1.
-        centre3d = -25. * e2 + 1. * e1 + 5.5 * e3
-
-        # Construct objects to render:
-        object_list = []
-        D1 = generate_dilation_rotor(0.5)
-        C1 = normalised((D1 * random_point_pair() * ~D1)(2))
-        C2 = normalised((D1 * random_point_pair() * ~D1)(2))
-        object_list.append(
-            PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-        )
-        if use_poly:
-            object_list[0].set_intersection_func_to_polynomial()
-
-        scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
-
-        # Construct the scene
-        new_scene = RayScene(camera=scene_camera,
-                             light_list=lights_list,
-                             object_list=object_list,
-                             background_color=background_color,
-                             max_bounces=2,
-                             shading_options=shading_options)
-
-        # Have a look at what we are rendering
-        new_scene.draw()
-
-        # Render it all
-        imrendered = new_scene.render()
-
-        # Save and show the image
-        if use_poly:
-            plt.imsave('PointPairPoly.png', imrendered.astype(np.uint8))
-        else:
-            plt.imsave('PointPair.png', imrendered.astype(np.uint8))
-        plt.imshow(imrendered)
-        plt.show()
-
-        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
-        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
-
-    def test_render_standard_point_pair_scene_iterative(self):
-        self._test_render_standard_point_pair_scene(use_poly=False)
-
-    def test_render_standard_point_pair_scene_poly(self):
-        self._test_render_standard_point_pair_scene(use_poly=True)
-
-    def _test_render_standard_point_pair_scene(self, use_poly):
-        shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
-                           'a1': 0.02, 'a2': 0.0, 'a3': 0.002}
-        k = 1.0
-
-        lights_list = []
-        L = -20. * e1 + 5. * e3 - 10. * e2
-        colour_light = np.ones(3)
-        lights_list.append(Light(L, colour_light))
-        L = 20. * e1 + 5. * e3 - 10. * e2
-        lights_list.append(Light(L, colour_light))
-
-        # Construct the camera
-        camera_lookat = e1
-        image_height = 150
-        image_width = 300
-        f = 1.
-        centre3d = - 10. * e2 + 1. * e1
-        scene_camera = Camera(centre3d, camera_lookat, f, image_height, image_width)
-
-        C1 = normalised(up(5 * e2 + -10 * e1 - 4 * e3) ^ up(5 * e2 + -10 * e1 + 4 * e2))
-        C2 = normalised(up(4 * e2 + 10 * e1 - 3 * e3) ^ up(5 * e2 + 10 * e1 + 5 * e3))
-
-        object_list = []
-        object_list.append(
-            PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
-        )
-        if use_poly:
-            object_list[0].set_intersection_func_to_polynomial()
-
-        # Construct the scene
-        new_scene = RayScene(camera=scene_camera,
-                             light_list=lights_list,
-                             object_list=object_list,
-                             max_bounces=2,
-                             shading_options=shading_options)
-
-        # Have a look at what we are rendering
-        # new_scene.draw()
-
-        # Render it all
-        imrendered = new_scene.render()
-
-        # Save and show the image
-        if use_poly:
-            plt.imsave('PointPairStandardPoly.png', imrendered.astype(np.uint8))
-        else:
-            plt.imsave('PointPairStandard.png', imrendered.astype(np.uint8))
-        # plt.imshow(imrendered)
+        plt.imsave('CircleRandom.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
         # plt.show()
 
         print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
         print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_random_circle_scene_poly(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        D1 = generate_dilation_rotor(0.5)
+        C1 = normalised((D1 * random_circle() * ~D1)(3))
+        C2 = normalised((D1 * random_circle() * ~D1)(3))
+        print(C1)
+        print(C2)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        surf.set_intersection_func_to_polynomial()
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('CircleRandomPoly.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_standard_circle_scene_iterative(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        C1 = -(0.29085 ^ e123) + (3.68441 ^ e124) + (3.76792 ^ e125) + (2.15058 ^ e134) + (2.2191 ^ e135) - (
+                    0.25056 ^ e145) + (0.36619 ^ e234) + (0.39441 ^ e235) - (0.25233 ^ e245) - (0.12238 ^ e345)
+        C2 = (0.87429 ^ e123) - (1.09265 ^ e124) - (1.09023 ^ e125) + (3.04129 ^ e134) + (3.25549 ^ e135) - (
+                    0.27613 ^ e145) + (1.12457 ^ e234) + (1.24885 ^ e235) - (0.15844 ^ e245) + (0.15679 ^ e345)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('CircleStandard.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_standard_circle_scene_poly(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        C1 = -(0.29085 ^ e123) + (3.68441 ^ e124) + (3.76792 ^ e125) + (2.15058 ^ e134) + (2.2191 ^ e135) - (
+                    0.25056 ^ e145) + (0.36619 ^ e234) + (0.39441 ^ e235) - (0.25233 ^ e245) - (0.12238 ^ e345)
+        C2 = (0.87429 ^ e123) - (1.09265 ^ e124) - (1.09023 ^ e125) + (3.04129 ^ e134) + (3.25549 ^ e135) - (
+                    0.27613 ^ e145) + (1.12457 ^ e234) + (1.24885 ^ e235) - (0.15844 ^ e245) + (0.15679 ^ e345)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        surf.set_intersection_func_to_polynomial()
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('CircleStandardPoly.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_scene_gaps(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        C1 = -(0.38185 ^ e123) - (0.24271 ^ e124) - (0.20731 ^ e125) + (3.81444 ^ e134) + (3.87756 ^ e135) + (
+                    0.39374 ^ e145) + (3.725 ^ e234) + (3.77326 ^ e235) + (0.376 ^ e245) + (0.1337 ^ e345)
+        C2 = (0.51432 ^ e123) + (3.55241 ^ e124) + (3.60069 ^ e125) - (0.84498 ^ e134) - (0.91997 ^ e135) - (
+                    0.43863 ^ e145) - (1.25114 ^ e234) - (1.14519 ^ e235) + (0.84926 ^ e245) - (0.35649 ^ e345)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('CircleGaps.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+    def test_render_scene_gaps_poly(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        C1 = -(0.38185 ^ e123) - (0.24271 ^ e124) - (0.20731 ^ e125) + (3.81444 ^ e134) + (3.87756 ^ e135) + (
+                    0.39374 ^ e145) + (3.725 ^ e234) + (3.77326 ^ e235) + (0.376 ^ e245) + (0.1337 ^ e345)
+        C2 = (0.51432 ^ e123) + (3.55241 ^ e124) + (3.60069 ^ e125) - (0.84498 ^ e134) - (0.91997 ^ e135) - (
+                    0.43863 ^ e145) - (1.25114 ^ e234) - (1.14519 ^ e235) + (0.84926 ^ e245) - (0.35649 ^ e345)
+        surf = CircleSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        surf.set_intersection_func_to_polynomial()
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('CircleGapsPoly.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+class PointPairScenes(unittest.TestCase):
+
+    def test_render_random_point_pair_scene_iterative(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        D1 = generate_dilation_rotor(0.5)
+        C1 = normalised((D1 * random_point_pair() * ~D1)(2))
+        C2 = normalised((D1 * random_point_pair() * ~D1)(2))
+        surf = PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('PointPairRandom.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_random_point_pair_scene_poly(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        D1 = generate_dilation_rotor(0.5)
+        C1 = normalised((D1 * random_point_pair() * ~D1)(2))
+        C2 = normalised((D1 * random_point_pair() * ~D1)(2))
+        surf = PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        surf.set_intersection_func_to_polynomial()
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('PointPairRandomPoly.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_standard_point_pair_scene_iterative(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        C1 = normalised(up(5 * e2 + -10 * e1 - 4 * e3) ^ up(5 * e2 + -10 * e1 + 4 * e2))
+        C2 = normalised(up(4 * e2 + 10 * e1 - 3 * e3) ^ up(5 * e2 + 10 * e1 + 5 * e3))
+        surf = PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('PointPairStandard.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+    def test_render_standard_point_pair_scene_poly(self):
+        k = 1.  # Magic constant to scale everything by the same amount!
+        # Construct objects to render:
+        C1 = normalised(up(5 * e2 + -10 * e1 - 4 * e3) ^ up(5 * e2 + -10 * e1 + 4 * e2))
+        C2 = normalised(up(4 * e2 + 10 * e1 - 3 * e3) ^ up(5 * e2 + 10 * e1 + 5 * e3))
+        surf = PointPairSurface(C2, C1, np.array([0., 0., 1.]), k * 1., 100., k * .5, k * 1., k * 0.)
+        surf.set_intersection_func_to_polynomial()
+        object_list = [surf]
+
+        # Render
+        gs, imrendered = _test_render_scene(object_list)
+
+        # Save and show the image
+        plt.imsave('PointPairStandardPoly.png', imrendered.astype(np.uint8))
+        # plt.imshow(imrendered.astype(np.uint8))
+        # plt.show()
+
+        print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
+        print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+        # draw(gs, scale=0.1, browser_window=True)
+
+
+class PrimitiveScenes(unittest.TestCase):
 
     def test_render_triangle_facet(self):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,
@@ -244,6 +328,9 @@ class RayTraceScenes(unittest.TestCase):
 
         print('MAX PIX: ', np.max(np.max(np.max(imrendered))))
         print('MIN PIX: ', np.min(np.min(np.min(imrendered))))
+
+
+class CombinedScenes(unittest.TestCase):
 
     def test_render_combined_scene(self):
         shading_options = {'ambient': 0.3, 'specular': True, 'diffuse': True,

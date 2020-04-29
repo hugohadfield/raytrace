@@ -18,7 +18,7 @@ class MultiVectorPolynomial(npp.Polynomial):
     """
     def grade(self, other):
         """ Return a new polynomial with mv coefficients of the desired grade only """
-        return MultiVectorPolynomial(cf.MVArray(self.coef)(other))
+        return MultiVectorPolynomial(cf.MVArray([c(other) for c in self.coef]))
 
     def __hash__(self):
         """ A hacky hash function to allow the polynomial to be used in functools.lru_cache """
@@ -43,7 +43,7 @@ class MultiVectorPolynomial(npp.Polynomial):
         this is equivalent to __mul__ for polynomials except it jumps past
         all the numpy sequence checking overhead etc etc.
         """
-        return MultiVectorPolynomial(np.convolve(self.coef, other.coef))
+        return MultiVectorPolynomial(mvconv(MVArray(self.coef), MVArray(other.coef)))
 
 
 
@@ -51,12 +51,12 @@ class MultiVectorPolynomial(npp.Polynomial):
 def poly_sigma(polyXdash):
     return -polyXdash*~polyXdash
 
-
-@functools.lru_cache(maxsize=128)
-def poly_norm_sigma_sqrd(polySigma):
+#
+# @functools.lru_cache(maxsize=128)
+def poly_norm_sigma_sqrd(polySigma: MultiVectorPolynomial) -> MultiVectorPolynomial:
     poly_zero_sigma = polySigma.grade(0)
     poly_four_sigma = polySigma.grade(4)
-    return (poly_zero_sigma*poly_zero_sigma - poly_four_sigma*poly_four_sigma).grade(0)
+    return (poly_zero_sigma*poly_zero_sigma - poly_four_sigma*poly_four_sigma)
 
 
 @functools.lru_cache(maxsize=128)
@@ -64,15 +64,15 @@ def poly_S_xdash(sigma, xdash):
     return (sigma.grade(0) - sigma.grade(4))*xdash
 
 
-def poly_pp_meet_L(p, L):
+def poly_pp_meet_L(p: MultiVectorPolynomial, L: cf.MultiVector) -> MultiVectorPolynomial:
     return MultiVectorPolynomial(I5*(L^cf.MVArray(p.coef)))
 
 
-def poly_meet_L(p, L):
+def poly_meet_L(p: MultiVectorPolynomial, L: cf.MultiVector) -> MultiVectorPolynomial:
     return MultiVectorPolynomial(I5*((I5*L)^(I5*cf.MVArray(p.coef))))
 
 
-def gen_full_poly_point_pairs(polyXdash: MultiVectorPolynomial, L: cf.MultiVector):
+def gen_full_scalar_poly_point_pairs(polyXdash: MultiVectorPolynomial, L: cf.MultiVector):
     """
     Generate the scalar polynomial associated with the intersection of
     the line L with the point-pair surface formed by reprojection of the
@@ -92,15 +92,16 @@ def gen_full_poly_point_pairs(polyXdash: MultiVectorPolynomial, L: cf.MultiVecto
 
 
 @numba.njit
-def _val_gen_full_poly_point_pairs(val_polyXdash, val_L):
+def _val_gen_full_scalar_poly_point_pairs(val_polyXdash, val_L):
     """
     Generate the scalar polynomial associated with the intersection of
     the line L with the point-pair surface formed by reprojection of the
     polynomial polyXdash onto the blade manifold.
 
-    This is a jitted version of gen_full_poly_point_pairs operating
+    This is a jitted version of gen_full_scalar_poly_point_pairs operating
     directly on value arrays for speed.
     """
+    # Note we have propogated the minus sign and cancelled it for sigma here
     val_sigma = _val_mvconv(val_polyXdash, val_polyXdash)
     sig4 = val_sigma @ mask4
     if np.sum(np.abs(sig4)) < 1E-8: # Degenerate case, the pps are on a circle
@@ -126,7 +127,7 @@ def _val_gen_full_poly_point_pairs(val_polyXdash, val_L):
     return final_poly
 
 
-def jitted_gen_full_poly_point_pairs(polyXdash, L):
+def jitted_gen_full_scalar_poly_point_pairs(polyXdash, L):
     """
     Generate the scalar polynomial associated with the intersection of
     the line L with the point-pair surface formed by reprojection of the
@@ -135,7 +136,7 @@ def jitted_gen_full_poly_point_pairs(polyXdash, L):
     This is a jitted version of gen_full_poly_point_pairs operating
     directly on value arrays for speed.
     """
-    return npp.Polynomial(_val_gen_full_poly_point_pairs(polyXdash.value, L.value))
+    return npp.Polynomial(_val_gen_full_scalar_poly_point_pairs(polyXdash.value, L.value))
 
 
 @numba.njit
@@ -177,7 +178,7 @@ def potential_roots_point_pairs(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.Mu
     # Set up the polynomial
     coef_array = cf.MVArray([X0, X1-X0])
     polyXdash = MultiVectorPolynomial(coef_array)
-    final_poly = gen_full_poly_point_pairs(polyXdash, L)
+    final_poly = gen_full_scalar_poly_point_pairs(polyXdash, L)
 
     # Solve the equation
     root_list = final_poly.roots()
@@ -240,7 +241,7 @@ def val_jitted_potential_roots_point_pairs(X0_val, X1_val, L_val):
     coef_array = np.zeros((2, 32))
     coef_array[0, :] = X0_val
     coef_array[1, :] = (X1_val - X0_val)
-    final_poly = _val_gen_full_poly_point_pairs(coef_array, L_val)
+    final_poly = _val_gen_full_scalar_poly_point_pairs(coef_array, L_val)
     comp = jitted_comp(final_poly)
     root_list = np.linalg.eigvals(comp)
 
@@ -256,24 +257,30 @@ def jitted_potential_roots_point_pairs(X0: cf.MultiVector, X1: cf.MultiVector, L
     return val_jitted_potential_roots_point_pairs(X0.value, X1.value, L.value)
 
 
-def gen_full_poly_circles(Xdash: MultiVectorPolynomial, L: cf.MultiVector) -> npp.Polynomial:
+def gen_full_poly_circles(Xdash: MultiVectorPolynomial, L: cf.MultiVector) -> MultiVectorPolynomial:
+    """
+        Generates the full polynomial for root finding evolved circle-ray
+        intersection
+        """
+    sigma = poly_sigma(Xdash)
+    sig0 = sigma.grade(0)
+    sig4 = sigma.grade(4)
+    Lvsig0Xdash = poly_meet_L(sig0 * (Xdash), L)
+    lvsig4Xdash = poly_meet_L(sig4 * (Xdash), L)
+    lvXdash = poly_meet_L(Xdash, L)
+    lv0sub4 = (Lvsig0Xdash - lvsig4Xdash)
+    left = ( lv0sub4** 2 + poly_norm_sigma_sqrd(sigma).conv(lvXdash ** 2)) ** 2
+    far_right = (lv0sub4.conv(lvXdash)) + (lvXdash.conv(lv0sub4))
+    right = poly_norm_sigma_sqrd(sigma).conv(far_right * far_right)
+    return (left - right)
+
+
+def gen_full_scalar_poly_circles(Xdash: MultiVectorPolynomial, L: cf.MultiVector) -> npp.Polynomial:
     """
     Generates the full polynomial for root finding evolved circle-ray
     intersection
     """
-    sigma = poly_sigma(Xdash)
-
-    sig0 = sigma.grade(0)
-    sig4 = sigma.grade(4)
-
-    Lvsig0Xdash = poly_meet_L(sig0*(Xdash), L)
-    lvsig4Xdash = poly_meet_L(sig4*(Xdash), L)
-    lvXdash = poly_meet_L(Xdash, L)
-
-    left = ((Lvsig0Xdash - lvsig4Xdash) ** 2 + poly_norm_sigma_sqrd(sigma) * lvXdash ** 2) ** 2
-    right = poly_norm_sigma_sqrd(sigma) * (
-                (Lvsig0Xdash - lvsig4Xdash) * lvXdash + lvXdash * (Lvsig0Xdash - lvsig4Xdash)) ** 2
-    return (left - right).scalar_poly
+    return gen_full_poly_circles(Xdash, L).scalar_poly
 
 
 @numba.njit
@@ -285,7 +292,7 @@ def val_poly_meet_L(poly, L):
 
 
 @numba.njit
-def _val_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
+def _val_gen_full_scalar_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
     """
     sigma = poly_sigma(Xdash)
 
@@ -303,6 +310,7 @@ def _val_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
 
     return (left - right).scalar_poly
     """
+    # Note we have propogated the minus sign and cancelled it for sigma here
     val_sigma = _val_mvconv(Xdash, Xdash)
     sig4 = val_sigma @ mask4
     if np.sum(np.abs(sig4)) < 1E-8:  # Degenerate case, the circles are on a sphere
@@ -313,20 +321,22 @@ def _val_gen_full_poly_circles(Xdash: np.ndarray, L: np.ndarray) -> np.ndarray:
     sig0 = val_sigma @ mask0
     Lvsig0Xdash = val_poly_meet_L(_val_mvconv(sig0, Xdash), L)
     Lvsig4Xdash = val_poly_meet_L(_val_mvconv(sig4, Xdash), L)
+
     lvXdash = val_poly_meet_L(Xdash, L)
+
     norm_sig_sqrd = _val_mvconv(sig0, sig0) - _val_mvconv(sig4, sig4)
     lv0sub4 = Lvsig0Xdash - Lvsig4Xdash
 
     left_rt = _val_mvconv(lv0sub4, lv0sub4) + _val_mvconv(norm_sig_sqrd, _val_mvconv(lvXdash, lvXdash))
-
     right_right = _val_mvconv(lv0sub4, lvXdash) + _val_mvconv(lvXdash, lv0sub4)
-
-    final = _val_mvconv(left_rt, left_rt)[:, 0] - _val_mvconv(norm_sig_sqrd, _val_mvconv(right_right, right_right))[:, 0]
+    left = _val_mvconv(left_rt, left_rt)
+    right = _val_mvconv(norm_sig_sqrd, _val_mvconv(right_right, right_right))
+    final = left[:, 0] - right[:, 0]
     return final
 
 
-def jitted_gen_full_poly_circles(Xdash: cf.MVArray, L: cf.MVArray) -> npp.Polynomial:
-    return npp.Polynomial(_val_gen_full_poly_circles(Xdash.value, L.value))
+def jitted_gen_full_scalar_poly_circles(Xdash: cf.MVArray, L: cf.MVArray) -> npp.Polynomial:
+    return npp.Polynomial(_val_gen_full_scalar_poly_circles(Xdash.value, L.value))
 
 
 @numba.njit
@@ -355,7 +365,7 @@ def potential_roots_circles(X0: cf.MultiVector, X1: cf.MultiVector, L: cf.MultiV
     Interpolated circles form of polynomial of order 12
     """
     Xdash = MultiVectorPolynomial(cf.MVArray([X0, X1 - X0]))
-    final_poly = gen_full_poly_circles(Xdash, L)
+    final_poly = gen_full_scalar_poly_circles(Xdash, L)
     # Solve the equation
     root_list = final_poly.roots()
     # Take only the real roots between 0 and 1
@@ -380,7 +390,7 @@ def val_jitted_potential_roots_circles(X0_val, X1_val, L_val):
     coef_array = np.zeros((2, 32))
     coef_array[0, :] = X0_val
     coef_array[1, :] = (X1_val - X0_val)
-    final_poly = _val_gen_full_poly_circles(coef_array, L_val)
+    final_poly = _val_gen_full_scalar_poly_circles(coef_array, L_val)
     comp = jitted_comp(final_poly)
     root_list = np.linalg.eigvals(comp)
 

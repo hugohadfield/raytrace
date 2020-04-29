@@ -61,7 +61,7 @@ class TestMultiVectorPolynomial(unittest.TestCase):
 
 class TestPointPairs(unittest.TestCase):
 
-    def test_jitted_gen_full_poly_point_pairs(self):
+    def test_jitted_gen_full_scalar_poly_point_pairs(self):
 
         for i in range(50):
             X0 = random_point_pair()
@@ -71,9 +71,9 @@ class TestPointPairs(unittest.TestCase):
 
             coef_array = cf.MVArray([X1, X0 - X1])
             polyXdash = MultiVectorPolynomial(coef_array)
-            final_poly = gen_full_poly_point_pairs(polyXdash, L)
+            final_poly = gen_full_scalar_poly_point_pairs(polyXdash, L)
 
-            final_poly_jit = jitted_gen_full_poly_point_pairs(coef_array, L)
+            final_poly_jit = jitted_gen_full_scalar_poly_point_pairs(coef_array, L)
 
 #             print('\n\n')
 #             print(final_poly.coef)
@@ -85,13 +85,13 @@ class TestPointPairs(unittest.TestCase):
 
         start_time = time.time()
         for i in range(nrepeats):
-            gen_full_poly_point_pairs(polyXdash, L)
+            gen_full_scalar_poly_point_pairs(polyXdash, L)
         end_time = time.time()
         print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
 
         start_time = time.time()
         for i in range(nrepeats):
-            jitted_gen_full_poly_point_pairs(coef_array, L)
+            jitted_gen_full_scalar_poly_point_pairs(coef_array, L)
         end_time = time.time()
         print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
 
@@ -107,7 +107,7 @@ class TestPointPairs(unittest.TestCase):
 
             S = average_objects([X1,X0],[0.2,(1-0.2)])
             L = ((S*einf*S)^up(0.0)^einf).normal()
-            final_poly = gen_full_poly_point_pairs(polyXdash, L)
+            final_poly = gen_full_scalar_poly_point_pairs(polyXdash, L)
 
             # Pick an alpha
             alpha = 0.4
@@ -245,26 +245,37 @@ class TestCircle(unittest.TestCase):
         L = ((S * einf * S) ^ up(0.0) ^ einf).normal()
 
         Xdash = MultiVectorPolynomial(cf.MVArray([X0, X1 - X0]))
-        final_poly = gen_full_poly_circles(Xdash, L)
+        full_poly = gen_full_poly_circles(Xdash, L)
+        print('full_poly ',  full_poly)
+        print('', flush=True)
+        final_scalar_poly = gen_full_scalar_poly_circles(Xdash, L)
+        jitted_scalar_poly = jitted_gen_full_scalar_poly_circles(cf.MVArray([X0, X1 - X0]), L)
 
-        # from pyganja import GanjaScene, Color
-        # gs = GanjaScene()
-        # gs.add_objects([X0, X1], color=Color.BLACK)
-        # gs.add_objects([S], color=Color.RED)
-        # gs.add_objects([L])
-        # draw(gs, scale=0.1)
+        from pyganja import GanjaScene, Color
+        gs = GanjaScene()
+        gs.add_objects([X0, X1], color=Color.BLACK)
+        gs.add_objects([S], color=Color.RED)
+        gs.add_objects([L])
+        draw(gs, scale=0.1)
 
         r = potential_roots_circles(X0, X1, L)
 
-        surf = CircleSurface(X0, X1)
-        print(surf.intersection_func(L.value))
-        print(r)
+        surf = CircleSurface(X0, X1, nprobe_alphas=2000)
+        print('probe method: ', surf.intersection_func(L.value))
+        print('\n\n\n')
+        print('polynomial method: ', r)
+        print(len(surf.probe_alphas), flush=True)
+        time.sleep(0.5)
+
+        # for alpha in surf.probe_alphas:
+        #     print(full_poly(alpha))
 
         # test the value at each
         import matplotlib.pyplot as plt
         plt.figure()
         plt.plot(surf.probe_alphas, surf.probe_func(L.value))
-        plt.plot(surf.probe_alphas, [final_poly(alpha) for alpha in surf.probe_alphas],'r')
+        plt.plot(surf.probe_alphas, [final_scalar_poly(alpha) for alpha in surf.probe_alphas],'r')
+        plt.plot(surf.probe_alphas, [jitted_scalar_poly(alpha) for alpha in surf.probe_alphas], 'g')
         plt.plot(surf.probe_alphas, surf.probe_alphas*0, 'k')
         plt.legend(["true meet", "polynomial function", "zero"])
         plt.savefig('circle_root_func.png')
@@ -308,35 +319,34 @@ class TestCircle(unittest.TestCase):
         print('Full production ms per eval: ', 1000*(end_time - start_time)/nrepeats)
 
 
-    def test_jitted_gen_full_poly_circles(self):
+    def test_jitted_gen_full_scalar_poly_circles(self):
 
         for i in range(1000):
-            X0 = random_point_pair()
-            X1 = random_point_pair()
+            X0 = random_circle()
+            X1 = random_circle()
             S = average_objects([X1, X0], [0.2, (1 - 0.2)])
             L = ((S * einf * S) ^ up(0.0) ^ einf).normal()
 
             coef_array = cf.MVArray([X1, X0 - X1])
             polyXdash = MultiVectorPolynomial(coef_array)
-            final_poly = gen_full_poly_circles(polyXdash, L)
+            final_poly = gen_full_scalar_poly_circles(polyXdash, L)
 
-            final_poly_jit = jitted_gen_full_poly_circles(coef_array, L)
+            final_poly_jit = jitted_gen_full_scalar_poly_circles(coef_array, L)
             np.testing.assert_allclose(final_poly.coef, final_poly_jit.coef)
 
         nrepeats = 100
 
         start_time = time.time()
         for i in range(nrepeats):
-            gen_full_poly_circles(polyXdash, L)
+            gen_full_scalar_poly_circles(polyXdash, L)
         end_time = time.time()
         print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
 
         start_time = time.time()
         for i in range(nrepeats):
-            jitted_gen_full_poly_circles(coef_array, L)
+            jitted_gen_full_scalar_poly_circles(coef_array, L)
         end_time = time.time()
         print('ms per eval: ', 1000 * (end_time - start_time) / nrepeats)
-
 
 
 if __name__ == '__main__':
