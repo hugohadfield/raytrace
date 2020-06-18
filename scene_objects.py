@@ -9,6 +9,7 @@ from math_utils import *
 from derivatives import *
 from polynomial_root import val_jitted_potential_roots_circles, val_jitted_potential_roots_point_pairs
 
+ninf_val = einf.value
 
 import matplotlib.pyplot as plt
 

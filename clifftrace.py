@@ -3,6 +3,7 @@ from scene_objects import *
 
 import matplotlib.pyplot as plt
 import matplotlib
+import time
 
 from pyganja import *
 
@@ -282,5 +283,8 @@ def benchmark(use_poly):
 
 
 if __name__ == "__main__":
+    start_time = time.time()
     for i in range(2):
-        benchmark(use_poly=False)
+        benchmark(use_poly=True)
+    end_time = time.time()
+    print('Benchmark time ', end_time - start_time)
