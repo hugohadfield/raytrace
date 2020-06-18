@@ -1,5 +1,5 @@
 import unittest
-from derivatives import *
+from ..derivatives import *
 
 
 class TestSquareRootDerivatives(unittest.TestCase):

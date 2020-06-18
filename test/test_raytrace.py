@@ -1,5 +1,5 @@
 import unittest
-from clifftrace import *
+from ..clifftrace import *
 
 
 def _test_render_scene(object_list):

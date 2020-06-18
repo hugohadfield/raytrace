@@ -1,5 +1,5 @@
 
-from clifftrace import *
+from ..clifftrace import *
 from clifford.g3c import *
 from clifford.tools.g3c import *
 import matplotlib.pyplot as plt
